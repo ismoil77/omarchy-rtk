@@ -33,6 +33,30 @@ test("parse: stats.py output, noise, and defaults", () => {
   assert.equal(M.parse("null"), null)
 })
 
+test("no answer at all is an error state for the asked mode", () => {
+  const f = M.failure("bar")
+  assert.equal(f.ok, false)
+  assert.equal(f.todayOk, false)
+  assert.equal(f.error, "internal")
+  assert.equal(f.period, "bar")
+  assert.equal(M.failure("week", "nodb").error, "nodb")
+  assert.equal(M.empty().todayOk, false)
+})
+
+test("stepProject walks the visible rows and falls off either end back to none", () => {
+  const stats = { projects: ["a", "b", "c", "d", "e", "f", "g"].map(id => ({ id })) }
+  assert.equal(M.stepProject(stats, "", false, 1), "a")
+  assert.equal(M.stepProject(stats, "", false, -1), "e")        // the last visible row
+  assert.equal(M.stepProject(stats, "", true, -1), "g")         // expanded: the real last row
+  assert.equal(M.stepProject(stats, "a", false, 1), "b")
+  assert.equal(M.stepProject(stats, "b", false, -1), "a")
+  assert.equal(M.stepProject(stats, "a", false, -1), "")
+  assert.equal(M.stepProject(stats, "e", false, 1), "")
+  assert.equal(M.stepProject(stats, "f", false, 1), "a")        // a selection that is not visible acts like none
+  assert.equal(M.stepProject({ projects: [] }, "", false, 1), "")
+  assert.equal(M.stepProject(undefined, "", false, 1), "")
+})
+
 test("periods", () => {
   assert.equal(M.validPeriod("week"), "week")
   assert.equal(M.validPeriod("year"), "today")
@@ -86,6 +110,10 @@ test("subtitle: saved line, and why there is none", () => {
   assert.equal(M.subtitle(en, { ...ok, period: "all" }), "Saved 119.7K all time")
   assert.equal(M.subtitle(en, { ok: false, error: "nodb" }), "rtk has no history yet")
   assert.equal(M.subtitle(en, { ok: false, error: "busy" }), "The rtk database is busy")
+  assert.match(M.subtitle(en, { ok: false, error: "schema" }), /layout/)
+  assert.match(M.subtitle(en, { ok: false, error: "unreadable" }), /cannot be read/)
+  assert.match(M.subtitle(en, { ok: false, error: "internal" }), /python3/)
+  assert.match(M.subtitle(ru, { ok: false, error: "schema" }), /устройство/)
   assert.equal(M.subtitle(ru, { ok: false, error: "" }), "Читаю базу…")
 })
 

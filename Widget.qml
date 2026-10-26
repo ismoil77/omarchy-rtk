@@ -16,8 +16,9 @@ import "Model.js" as Model
 //   right click  - refresh now
 //   middle click - `rtk gain --graph` in a floating terminal
 //   popup        - period buttons (also 1/2/3 or p), ←/→ or hover to read a
-//                  column, click a project for its copies and top commands,
-//                  click again to go back, r refreshes, Enter opens the report
+//                  column, ↑/↓ or a click pick a project for its copies and
+//                  top commands (click it again to go back), m shows more
+//                  projects, r refreshes, Enter opens the report
 Panel {
   id: root
   moduleName: "ismoil.rtk"
@@ -43,6 +44,9 @@ Panel {
   // The mode changed while stats.py was still running: its answer is for the
   // old mode, so one more run follows it.
   property bool rerun: false
+  // What the run in flight was asked for, and whether it answered.
+  property string runMode: "bar"
+  property bool answered: false
 
   readonly property var project: Model.findProject(stats, selected)
   readonly property var topCommands: project ? project.top : stats.top
@@ -73,24 +77,30 @@ Panel {
       rerun = true
       return
     }
-    var command = ["python3", "-I", script, opened ? period : "bar"]
+    runMode = opened ? period : "bar"
+    answered = false
+    var command = ["python3", "-I", script, runMode]
     var database = String(setting("database", "")).trim()
     if (database !== "") command.push("--db", database)
     statsProc.command = command
     statsProc.running = true
   }
 
+  // `raw` is what stats.py printed; no usable answer is an error in its own right.
   function applyStats(raw) {
-    var next = Model.parse(raw)
-    if (!next) return
-    if (next.ok) {
+    answered = true
+    var next = Model.parse(raw) || Model.failure(runMode, "internal")
+    if (next.todayOk) {
       today = next.today
       todayOk = true
+    } else if (next.error !== "busy") {
+      // Gone, unreadable or changed: do not keep showing a number that may be from yesterday.
+      todayOk = false
     }
     // The bar-only answer, or a late one for the period the user just left.
     if (next.period !== period) return
-    // Database busy or unreadable: keep the last good numbers.
-    if (!next.ok && stats.ok && stats.period === period) return
+    // Only a busy database is worth waiting out: keep the last good numbers.
+    if (next.error === "busy" && stats.ok && stats.period === period) return
     stats = next
     if (selected !== "" && !Model.findProject(stats, selected)) selected = ""
   }
@@ -113,6 +123,12 @@ Panel {
 
   function toggleProject(id) {
     selected = selected === id ? "" : id
+    allCopies = false
+  }
+
+  // ↑/↓ walk the project rows: the copies and top commands of the picked one appear below.
+  function moveProject(step) {
+    selected = Model.stepProject(stats, selected, allProjects, step)
     allCopies = false
   }
 
@@ -141,11 +157,20 @@ Panel {
   Process {
     id: statsProc
     stdout: StdioCollector { waitForEnd: true; onStreamFinished: root.applyStats(text) }
+    // python3 missing or killed: nothing was printed. The output can still be
+    // on its way when the exit is reported, so the verdict waits a moment.
+    onExited: function(code, status) { silence.restart() }
     onRunningChanged: {
       if (running || !root.rerun) return
       root.rerun = false
       root.refresh()
     }
+  }
+
+  Timer {
+    id: silence
+    interval: 500
+    onTriggered: if (!root.answered && !statsProc.running) root.applyStats("")
   }
 
   Timer {
@@ -199,11 +224,15 @@ Panel {
       onActivateRequested: root.openReport()
       onCloseRequested: root.close()
       onTabRequested: function(direction) { root.switchPanel(direction) }
-      onMoveRequested: function(dx, dy) { if (dx !== 0) root.moveCursor(dx) }
+      onMoveRequested: function(dx, dy) {
+        if (dx !== 0) root.moveCursor(dx)
+        if (dy !== 0) root.moveProject(dy)
+      }
       onTextKey: function(t) {
         if (t === "r") root.refresh()
         else if (t >= "1" && t <= "3") root.setPeriod(Model.PERIODS[Number(t) - 1])
         else if (t === "p") root.setPeriod(Model.nextPeriod(root.period))
+        else if (t === "m") root.allProjects = !root.allProjects
       }
 
       // A long project list or large text can outgrow the screen: it scrolls.

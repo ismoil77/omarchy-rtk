@@ -9,6 +9,9 @@ var en = {
   loading: "Reading the database…",
   errNoDb: "rtk has no history yet",
   errBusy: "The rtk database is busy",
+  errSchema: "The rtk database has a layout this widget does not know",
+  errUnreadable: "The rtk database cannot be read",
+  errInternal: "The reader failed to run (is python3 installed?)",
 
   periodToday: "Today",
   periodWeek: "7 days",
@@ -66,6 +69,9 @@ var ru = {
   loading: "Читаю базу…",
   errNoDb: "У rtk ещё нет истории",
   errBusy: "База rtk занята",
+  errSchema: "У базы rtk незнакомое виджету устройство",
+  errUnreadable: "Базу rtk не удаётся прочитать",
+  errInternal: "Не удалось запустить чтение (есть ли python3?)",
 
   periodToday: "Сегодня",
   periodWeek: "7 дней",

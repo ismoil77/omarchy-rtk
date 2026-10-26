@@ -24,7 +24,8 @@ import os
 import sqlite3
 import subprocess
 import sys
-from datetime import datetime, time, timedelta, timezone
+import time
+from datetime import datetime, timedelta, timezone
 
 # HEADLINE_INPUT_CAP_TOKENS in rtk (src/core/tracking.rs).
 INPUT_CAP = 7500
@@ -40,6 +41,8 @@ COUNTED = "input_tokens <= %d" % INPUT_CAP
 SAVED = "max(saved_tokens, 0)"
 
 TMP = "/tmp"
+# How long a read may wait for rtk to finish writing before the widget tries again later.
+BUSY_TIMEOUT = 2
 
 
 def data_home(env=None):
@@ -57,7 +60,7 @@ def default_db():
 
 
 def default_cache():
-    return os.path.join(cache_home(), "ismoil-rtk", "paths-v4.json")
+    return os.path.join(cache_home(), "ismoil-rtk", "paths-v6.json")
 
 
 # ---------- time ----------
@@ -70,7 +73,7 @@ def utc(moment):
 def local_midnight(now, days_ago=0):
     """Local midnight `days_ago` days before the day of `now`, DST-correct."""
     day = now.date() - timedelta(days=days_ago)
-    return datetime.combine(day, time()).astimezone()
+    return datetime.combine(day, datetime.min.time()).astimezone()
 
 
 def period_start(now, period):
@@ -84,17 +87,23 @@ def period_start(now, period):
 # ---------- projects ----------
 
 def git(path, *args):
+    """git's answer, "" when git says no, None when it could not be asked."""
     try:
         out = subprocess.run(["git", "-C", path, *args], capture_output=True, text=True, timeout=2)
     except (OSError, subprocess.TimeoutExpired):
-        return ""
+        return None
     return out.stdout.strip() if out.returncode == 0 else ""
 
 
 def repo_of(path):
-    """[repo path, name, copy, "repo"] for a folder inside git, else None."""
+    """[repo path, name, copy, "repo"] for a folder inside git; None when it is
+    not in git; UNKNOWN when git could not be asked (do not remember that)."""
     common = git(path, "rev-parse", "--path-format=absolute", "--git-common-dir")
+    if common is None:
+        return UNKNOWN
     top = git(path, "rev-parse", "--show-toplevel")
+    if top is None:
+        return UNKNOWN
     if not common or not top:
         return None
     repo = os.path.dirname(common.rstrip("/")) if common.endswith("/.git") else common
@@ -102,28 +111,40 @@ def repo_of(path):
     return [repo, os.path.basename(repo), copy, "repo"]
 
 
+UNKNOWN = object()
+# A folder outside git is looked at again after this long: it may have become a repo.
+RECHECK_SECONDS = 24 * 3600
+
+
 class Projects:
     """Maps a project path from the history to [id, name, copy, kind].
 
     kind is "repo", "folder" (outside git), "tmp" (agent sandboxes under /tmp,
     all one row) or "home" (what ran in the home folder itself, not in its
-    subfolders). An empty copy is the main checkout. Answers are cached on
-    disk so a deleted worktree still lands in its project.
+    subfolders). An empty copy is the main checkout. Answers that come from
+    git or from other answers are cached on disk, so a deleted worktree still
+    lands in its project; guesses made from a path's shape alone are not, so
+    they are corrected as soon as a live copy shows where the repo is.
     """
 
-    def __init__(self, cache_path, home=None, tmp=TMP):
+    def __init__(self, cache_path, home=None, tmp=TMP, clock=time.time):
         self.cache_path = cache_path
         self.home = home or os.path.expanduser("~")
         self.tmp = tmp
+        self.clock = clock
         self.cache = self._load()
 
     def _load(self):
         try:
             with open(self.cache_path) as f:
                 data = json.load(f)
-            return data if isinstance(data, dict) else {}
         except (OSError, ValueError):
             return {}
+        if not isinstance(data, dict):
+            return {}
+        # Entries from a damaged or older file are dropped, not trusted.
+        return {k: v for k, v in data.items()
+                if isinstance(v, list) and len(v) in (4, 5) and all(isinstance(x, str) for x in v[:4])}
 
     def save(self):
         try:
@@ -137,9 +158,21 @@ class Projects:
             pass
 
     def of(self, path):
-        if path not in self.cache:
-            self.cache[path] = self._resolve(path)
-        return self.cache[path]
+        known = self.cache.get(path)
+        if known is not None and not self._stale(path, known):
+            return known[:4]
+        value, remember = self._resolve(path)
+        if remember:
+            self.cache[path] = value + ([str(int(self.clock()))] if value[3] == "folder" else [])
+        return value
+
+    def _stale(self, path, entry):
+        if entry[3] != "folder" or len(entry) < 5:
+            return False
+        try:
+            return self.clock() - float(entry[4]) > RECHECK_SECONDS and os.path.isdir(path)
+        except ValueError:
+            return True
 
     def _folder(self, path):
         if path == self.tmp or path.startswith(self.tmp + "/"):
@@ -148,41 +181,64 @@ class Projects:
             return [self.home, "", "", "home"]
         return [path, os.path.basename(path.rstrip("/")) or path, "", "folder"]
 
-    def _resolve(self, path):
+    def _repo_at(self, path):
+        """The repo whose root is `path`, from the cache or from git; None when unknown."""
+        known = self.cache.get(path)
+        if known is not None and known[3] == "repo":
+            return known[:4]
         if os.path.isdir(path):
-            return repo_of(path) or self._folder(path)
+            found = repo_of(path)
+            if found not in (None, UNKNOWN):
+                return found
+        return None
 
-        # The path is gone. A parent resolved while it was alive, or the
-        # nearest live parent inside git, takes the subfolders of a deleted worktree.
-        probe = os.path.dirname(path)
-        while probe not in ("", "/"):
-            if probe in self.cache:
-                return self.cache[probe]
-            if os.path.isdir(probe):
-                found = repo_of(probe)
-                if found:
-                    return found
-                break
-            probe = os.path.dirname(probe)
+    def _resolve(self, path):
+        """(value, remember): remember is False for an answer that is only a guess."""
+        if os.path.isdir(path):
+            found = repo_of(path)
+            if found is UNKNOWN:
+                return self._folder(path), False   # git was too slow; ask again next time
+            return found or self._folder(path), True
 
         parts = path.rstrip("/").split("/")
-        # <repo>/.claude/worktrees/<copy> (Claude Code)
+        # <repo>/.claude/worktrees/<copy> (Claude Code): the copy is named by the
+        # path itself, whether or not the repo is still there.
         if ".claude" in parts:
             i = parts.index(".claude")
             if len(parts) > i + 2 and parts[i + 1] == "worktrees":
                 repo = "/".join(parts[:i])
-                return [repo, os.path.basename(repo), parts[i + 2], "repo"]
-        # .../worktrees/<project>/<copy>: the repo lives elsewhere, and any
-        # other copy of the project already in the cache knows where.
+                found = self._repo_at(repo)
+                if found:
+                    return [found[0], found[1], parts[i + 2], "repo"], True
+                return [repo, os.path.basename(repo), parts[i + 2], "repo"], False
+        # .../worktrees/<project>/<copy>: the repo lives elsewhere, and any other
+        # copy of the project that is already known says where.
         if "worktrees" in parts:
             i = parts.index("worktrees")
             if len(parts) > i + 2:
                 group = "/".join(parts[:i + 2]) + "/"
                 for known, value in self.cache.items():
-                    if known.startswith(group):
-                        return [value[0], value[1], parts[i + 2], value[3]]
-                return [group.rstrip("/"), parts[i + 1], parts[i + 2], "repo"]
-        return self._folder(path)
+                    if known.startswith(group) and value[3] == "repo":
+                        return [value[0], value[1], parts[i + 2], "repo"], True
+                return [group.rstrip("/"), parts[i + 1], parts[i + 2], "repo"], False
+
+        # Any other deleted path: a repo resolved while it was alive, or the
+        # nearest live parent inside git. Under a live folder that is not in git,
+        # the whole deleted tree is one project: its top folder.
+        child = path
+        probe = os.path.dirname(path)
+        while probe not in ("", "/"):
+            known = self.cache.get(probe)
+            if known is not None and known[3] == "repo":
+                return known[:4], True
+            if os.path.isdir(probe):
+                found = repo_of(probe)
+                if found is UNKNOWN:
+                    return self._folder(path), False
+                return (found, True) if found else (self._folder(child), True)
+            child = probe
+            probe = os.path.dirname(probe)
+        return self._folder(path), True
 
 
 # ---------- counting ----------
@@ -275,12 +331,17 @@ def full(db, now, period, projects):
     decisions = dict(db.execute(
         "select decision, count(*) from hook_decisions where timestamp >= ? group by 1", (since,)).fetchall())
 
+    # Live folders first: they teach the cache where each repo is, so a deleted
+    # copy of it is placed correctly whatever order the rows come in.
+    paths = sorted({row["project_path"] or "" for row in rows}, key=lambda p: (not os.path.isdir(p), p))
+    placed = {path: projects.of(path) for path in paths}
+
     total = bucket()
     commands = {}
     by_project = {}
     worse = 0
     for row in rows:
-        key, name, copy, kind = projects.of(row["project_path"] or "")
+        key, name, copy, kind = placed[row["project_path"] or ""]
         command = command_name(row["rtk_cmd"])
         worse += row["worse"]
 
@@ -332,27 +393,40 @@ def full(db, now, period, projects):
     }
 
 
+def error_code(e):
+    """Why the database could not be read: busy (try again), schema (rtk changed),
+    or unreadable (not a database, I/O)."""
+    text = str(e).lower()
+    if "locked" in text or "busy" in text:
+        return "busy"
+    if text.startswith("no such") or "has no column" in text:
+        return "schema"
+    return "unreadable"
+
+
 def summarize(db_path, cache_path, period, now=None):
-    """The JSON object for `period` (or "bar"), as a dict."""
+    """The JSON object for `period` (or "bar"), as a dict. Today's total is
+    kept whenever it could be read, even if the rest could not."""
     now = now or datetime.now().astimezone()
-    result = {"ok": False, "period": period}
+    result = {"ok": False, "period": period, "todayOk": False}
     if not os.path.exists(db_path):
         result["error"] = "nodb"
         return result
     try:
-        db = sqlite3.connect("file:" + db_path + "?mode=ro", uri=True, timeout=2)
+        db = sqlite3.connect("file:" + db_path + "?mode=ro", uri=True, timeout=BUSY_TIMEOUT)
         db.row_factory = sqlite3.Row
         try:
             result["today"] = today_totals(db, now)
+            result["todayOk"] = True
             if period != "bar":
                 result.update(full(db, now, period, Projects(cache_path)))
         finally:
             db.close()
         result["ok"] = True
     except sqlite3.Error as e:
-        # The database is busy being written, or its schema changed: the
-        # widget keeps the last good numbers.
-        result["error"] = "busy"
+        # busy: the widget keeps the last good numbers; the other codes are
+        # permanent until rtk or the file changes.
+        result["error"] = error_code(e)
         result["detail"] = str(e)
     return result
 
@@ -364,7 +438,11 @@ def main(argv=None):
                         help="rtk history database (default: rtk's own location)")
     parser.add_argument("--cache", default=default_cache())
     args = parser.parse_args(argv)
-    print(json.dumps(summarize(args.db, args.cache, args.period), ensure_ascii=False))
+    try:
+        result = summarize(args.db, args.cache, args.period)
+    except Exception as e:  # the widget needs an answer it can show, never a traceback
+        result = {"ok": False, "period": args.period, "todayOk": False, "error": "internal", "detail": repr(e)}
+    print(json.dumps(result, ensure_ascii=False))
 
 
 if __name__ == "__main__":

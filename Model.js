@@ -29,6 +29,7 @@ function empty(period) {
     ok: false,
     error: "",
     detail: "",
+    todayOk: false,
     period: period || "today",
     version: "",
     today: emptyTotals(),
@@ -41,6 +42,12 @@ function empty(period) {
     projects: [],
     top: []
   }
+}
+
+// What the widget shows when stats.py gave no answer at all (it crashed, or
+// python is missing): an error state for the mode that was asked.
+function failure(period, code) {
+  return Object.assign(empty(period), { error: code || "internal" })
 }
 
 // stats.py prints one JSON object; anything else is ignored so the widget
@@ -108,6 +115,9 @@ function subtitle(cfg, stats) {
   if (stats.ok) return tr(cfg, "savedLine", { n: tokens(cfg, stats.total.saved), since: tr(cfg, SINCE_KEYS[stats.period] || SINCE_KEYS.today) })
   if (stats.error === "nodb") return tr(cfg, "errNoDb")
   if (stats.error === "busy") return tr(cfg, "errBusy")
+  if (stats.error === "schema") return tr(cfg, "errSchema")
+  if (stats.error === "unreadable") return tr(cfg, "errUnreadable")
+  if (stats.error === "internal") return tr(cfg, "errInternal")
   return tr(cfg, "loading")
 }
 
@@ -148,6 +158,18 @@ function findProject(data, id) {
     if (list[i].id === id) return list[i]
   }
   return null
+}
+
+// The project picked by stepping `step` rows through the visible list: down
+// from the last row or up from the first one goes back to "none" (""). Steps
+// from "none" enter at the top (down) or the bottom (up).
+function stepProject(stats, selected, expanded, step) {
+  var rows = visibleRows(stats && stats.projects, expanded)
+  if (rows.length === 0) return ""
+  var at = -1
+  for (var i = 0; i < rows.length; i++) if (rows[i].id === selected) at = i
+  var next = at < 0 ? (step > 0 ? 0 : rows.length - 1) : at + step
+  return next < 0 || next >= rows.length ? "" : rows[next].id
 }
 
 function visibleRows(list, expanded) {

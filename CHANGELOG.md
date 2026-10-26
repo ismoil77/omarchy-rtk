@@ -15,8 +15,19 @@
   worktree manager: any `…/worktrees/<project>/<copy>` layout is understood.
 - `database` setting for a non-default `history.db`; `animations` switch.
 - The count column is sized from the data (a five-digit count no longer overlaps its name).
-- Renamed `Panel.qml` → `Widget.qml`; the cache moved to `~/.cache/ismoil-rtk/paths-v4.json`.
-- 78 automated tests (Python, Node, Qt's own engine), CI, README in two languages.
+- Renamed `Panel.qml` → `Widget.qml`; the cache moved to `~/.cache/ismoil-rtk/paths-v6.json`.
+- **Project grouping no longer depends on row order.** A deleted worktree is placed by its live
+  siblings in the same run; a guess made from a path's shape is never remembered; a deleted
+  `.claude/worktrees/<copy>` of a live repo keeps its own name; a deleted tree under a plain folder
+  is one project instead of collapsing into its parent; a slow git answer is not cached; a folder
+  outside git is looked at again after a day. (Cache is now `paths-v6.json`.)
+- **Errors say what is wrong:** `busy` (waits, keeps the last numbers), `schema` (rtk changed),
+  `unreadable`, `nodb`, `internal` (python missing or crashed). Today's total survives a failed
+  full read, and the bar no longer keeps a number from yesterday when the database goes away.
+- **Keyboard:** `↑`/`↓` (or `j`/`k`) pick a project, `m` shows more of them.
+- The chart's quiet and picked columns are both 3:1 graphics; a translucent popup background is
+  judged over the theme's background (kit 1.1.0).
+- 93 automated tests (Python, Node, Qt's own engine), CI, README in two languages.
 
 ## 2.0.0
 

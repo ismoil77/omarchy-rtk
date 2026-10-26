@@ -34,6 +34,11 @@ def set_tz(name):
     time.tzset()
 
 
+def rtk_stamp(when):
+    """A timestamp as rtk writes it: UTC, nanoseconds, an explicit offset."""
+    return when.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S") + ".027487078+00:00"
+
+
 def local(*args):
     """A local moment, as an aware datetime."""
     return datetime(*args).astimezone()
@@ -74,7 +79,7 @@ class Base(unittest.TestCase):
     # -- fixtures
     def add(self, when, rtk_cmd="rtk grep x", inp=1000, out=400, path="", ms=10, saved=None):
         """One command at the local moment `when`."""
-        stamp = stats.utc(when)
+        stamp = rtk_stamp(when)
         saved = inp - out if saved is None else saved
         db = sqlite3.connect(self.db_path)
         db.execute("insert into commands (timestamp, original_cmd, rtk_cmd, input_tokens, output_tokens,"
@@ -86,7 +91,7 @@ class Base(unittest.TestCase):
     def hook(self, when, decision, version="1.0.0"):
         db = sqlite3.connect(self.db_path)
         db.execute("insert into hook_decisions (timestamp, session_id, tool_use_id, raw_cmd, decision, rtk_version)"
-                   " values (?,?,?,?,?,?)", (stats.utc(when), "s", "t", "cmd", decision, version))
+                   " values (?,?,?,?,?,?)", (rtk_stamp(when), "s", "t", "cmd", decision, version))
         db.commit()
         db.close()
 
@@ -398,6 +403,92 @@ class ProjectGrouping(Base):
         path = "/nonexistent-root/worktrees/proj/copy-a/src"
         self.assertEqual(self.projects().of(path), ["/nonexistent-root/worktrees/proj", "proj", "copy-a", "repo"])
 
+    def test_a_deleted_copy_does_not_depend_on_the_order_of_the_rows(self):
+        # The history names the gone copy first in every ordering; it must still
+        # end up in the repo its live sibling belongs to, in the very same run.
+        main = self.repo("app")
+        group = os.path.join(self.dir, "wt-root", "worktrees", "app")
+        os.makedirs(group)
+        live = os.path.join(group, "zzz-live")
+        self.git(main, "worktree", "add", "-q", live)
+        gone = os.path.join(group, "aaa-gone", "src")
+        self.add(local(2026, 10, 26, 9), path=gone)
+        self.add(local(2026, 10, 26, 9), path=live)
+        r = self.run_stats("today")
+        self.assertEqual(len(r["projects"]), 1)
+        self.assertEqual({c["name"] for c in r["projects"][0]["copies"]}, {"aaa-gone", "zzz-live"})
+        self.assertEqual(r["projects"][0]["id"], main)
+
+    def test_a_guess_from_a_path_is_not_remembered(self):
+        main = self.repo("app")
+        group = os.path.join(self.dir, "wt-root", "worktrees", "app")
+        os.makedirs(group)
+        live = os.path.join(group, "live")
+        self.git(main, "worktree", "add", "-q", live)
+        gone = os.path.join(group, "gone")
+        p = self.projects()
+        guess = p.of(gone)                       # nothing known yet: a guess from the layout
+        self.assertEqual(guess[0], group)
+        self.assertNotIn(gone, p.cache)
+        p.of(live)
+        self.assertEqual(p.of(gone)[:3], [main, "app", "gone"])   # corrected once a sibling is known
+        self.assertIn(gone, p.cache)
+
+    def test_a_deleted_claude_worktree_of_a_live_repo_keeps_its_own_name(self):
+        main = self.repo("app")
+        os.makedirs(os.path.join(main, ".claude", "worktrees"))
+        gone = os.path.join(main, ".claude", "worktrees", "gone-copy")
+        self.assertEqual(self.projects().of(gone), [main, "app", "gone-copy", "repo"])
+        self.assertEqual(self.projects().of(gone + "/src/lib")[2], "gone-copy")
+
+    def test_a_cached_main_checkout_does_not_swallow_its_deleted_copies(self):
+        main = self.repo("app")
+        p = self.projects()
+        p.of(main)  # the main checkout is known, as it is after the first run
+        gone = os.path.join(main, ".claude", "worktrees", "feature")
+        self.assertEqual(p.of(gone)[2], "feature")
+
+    def test_when_git_is_too_slow_the_answer_is_not_remembered(self):
+        app = self.repo("app")
+        original = stats.git
+        stats.git = lambda *a: None   # timeout or no git
+        try:
+            p = self.projects(tmp="/nonexistent-tmp")
+            self.assertEqual(p.of(app)[3], "folder")
+            self.assertNotIn(app, p.cache)
+        finally:
+            stats.git = original
+        self.assertEqual(self.projects().of(app)[:2], [app, "app"])
+
+    def test_a_folder_that_becomes_a_repo_is_looked_at_again_after_a_day(self):
+        folder = os.path.join(self.dir, "later")
+        os.makedirs(folder)
+        now = [1_000_000.0]
+        p = self.projects(tmp="/nonexistent-tmp", clock=lambda: now[0])
+        self.assertEqual(p.of(folder)[3], "folder")
+        subprocess.run(["git", "init", "-q", folder], check=True, capture_output=True)
+        self.git(folder, "commit", "-q", "--allow-empty", "-m", "init")
+        self.assertEqual(p.of(folder)[3], "folder")           # remembered, same day
+        now[0] += stats.RECHECK_SECONDS + 1
+        self.assertEqual(p.of(folder)[3], "repo")
+
+    def test_a_deleted_tree_under_a_plain_folder_is_one_project(self):
+        parent = os.path.join(self.dir, "Projects")
+        os.makedirs(parent)
+        p = self.projects(tmp="/nonexistent-tmp")
+        p.of(parent)  # the live folder itself is in the history too
+        top = os.path.join(parent, "gone-app")
+        for sub in ("", "/apps/web", "/crates/core/src"):
+            self.assertEqual(p.of(top + sub), [top, "gone-app", "", "folder"], sub)
+        self.assertEqual(p.of(parent)[1], "Projects")
+
+    def test_damaged_cache_entries_are_dropped(self):
+        os.makedirs(os.path.dirname(self.cache_path))
+        good = ["/a", "a", "", "repo"]
+        json.dump({"/good": good, "/short": ["/a", "a"], "/num": [1, 2, 3, 4], "/str": "x", "/null": None},
+                  open(self.cache_path, "w"))
+        self.assertEqual(self.projects().cache, {"/good": good})
+
     def test_cache_round_trip_and_garbage(self):
         p = self.projects(tmp="/nonexistent-tmp")
         p.of(self.home)
@@ -418,20 +509,73 @@ class ProjectGrouping(Base):
 class Failures(Base):
     def test_no_database(self):
         r = stats.summarize(os.path.join(self.dir, "missing.db"), self.cache_path, "today", self.now)
-        self.assertEqual((r["ok"], r["error"]), (False, "nodb"))
+        self.assertEqual((r["ok"], r["error"], r["todayOk"]), (False, "nodb", False))
 
-    def test_unreadable_database_reports_busy_with_detail(self):
+    def test_a_file_that_is_not_a_database_is_unreadable(self):
         open(self.db_path, "wb").write(b"this is not sqlite" * 100)
         r = self.run_stats("today")
-        self.assertEqual((r["ok"], r["error"]), (False, "busy"))
+        self.assertEqual((r["ok"], r["error"]), (False, "unreadable"))
         self.assertTrue(r["detail"])
 
-    def test_a_schema_change_reports_busy(self):
+    def test_a_directory_is_unreadable(self):
+        r = stats.summarize(self.dir, self.cache_path, "today", self.now)
+        self.assertEqual(r["error"], "unreadable")
+
+    def test_a_locked_database_is_busy_and_worth_retrying(self):
+        self.add(local(2026, 10, 26, 9))
+        stats.BUSY_TIMEOUT, saved = 0.05, stats.BUSY_TIMEOUT
+        locker = sqlite3.connect(self.db_path, isolation_level=None)
+        locker.execute("begin exclusive")
+        try:
+            r = self.run_stats("today")
+        finally:
+            locker.execute("rollback")
+            locker.close()
+            stats.BUSY_TIMEOUT = saved
+        self.assertEqual((r["ok"], r["error"]), (False, "busy"))
+
+    def test_a_schema_change_is_its_own_code_and_today_survives(self):
+        self.add(local(2026, 10, 26, 9), inp=1000, out=400)
         db = sqlite3.connect(self.db_path)
         db.execute("drop table hook_decisions")
         db.commit()
         db.close()
-        self.assertEqual(self.run_stats("week")["error"], "busy")
+        r = self.run_stats("week")
+        self.assertEqual((r["ok"], r["error"]), (False, "schema"))
+        self.assertTrue(r["todayOk"])
+        self.assertEqual(r["today"]["saved"], 600)
+
+    def test_an_older_schema_without_project_path_is_a_schema_error(self):
+        db = sqlite3.connect(self.db_path)
+        db.execute("alter table commands drop column project_path")
+        db.commit()
+        db.close()
+        r = self.run_stats("all")
+        self.assertEqual(r["error"], "schema")
+        self.assertTrue(r["todayOk"])
+
+    def test_any_other_failure_still_prints_json(self):
+        def boom(*a, **k):
+            raise RuntimeError("boom")
+        original = stats.summarize
+        stats.summarize = boom
+        try:
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                stats.main(["--db", self.db_path, "week"])
+        finally:
+            stats.summarize = original
+        r = json.loads(buf.getvalue())
+        self.assertEqual((r["ok"], r["error"], r["period"]), (False, "internal", "week"))
+        self.assertIn("boom", r["detail"])
+
+    def test_error_codes(self):
+        e = sqlite3.OperationalError
+        self.assertEqual(stats.error_code(e("database is locked")), "busy")
+        self.assertEqual(stats.error_code(e("no such column: project_path")), "schema")
+        self.assertEqual(stats.error_code(e("no such table: commands")), "schema")
+        self.assertEqual(stats.error_code(e("disk I/O error")), "unreadable")
+        self.assertEqual(stats.error_code(sqlite3.DatabaseError("file is not a database")), "unreadable")
 
     def test_the_database_is_never_written(self):
         self.add(local(2026, 10, 26, 9))

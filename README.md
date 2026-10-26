@@ -27,7 +27,7 @@ floating terminal.
 - **Top commands** by tokens saved. `git status` and `git diff` are separate rows.
 
 Keys: `Esc` close · `1` `2` `3` today / 7 days / all time · `p` next period · `←` `→` step through
-the chart · `r` refresh · `Enter` full report · `Tab` next panel.
+the chart · `↑` `↓` pick a project · `m` more projects · `r` refresh · `Enter` full report · `Tab` next panel.
 
 ## Install
 
@@ -65,7 +65,7 @@ scrolls when large text outgrows the screen.
 
 The widget opens rtk's database **read-only** and never writes to it. It makes no network calls.
 The only thing it writes is a small cache of folder → project lookups in
-`$XDG_CACHE_HOME/ismoil-rtk/paths-v4.json`, so deleted worktrees still land in their project.
+`$XDG_CACHE_HOME/ismoil-rtk/paths-v6.json`, so deleted worktrees still land in their project.
 It runs `git` in your project folders to find the repository they belong to.
 
 ## Another language
