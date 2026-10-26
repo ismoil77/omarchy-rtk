@@ -1,0 +1,87 @@
+{
+  "schemaVersion": 1,
+  "id": "ismoil.rtk",
+  "name": "rtk",
+  "version": "3.0.0",
+  "author": "ismoil",
+  "license": "MIT",
+  "description": "Tokens saved by rtk today in the bar, and a popup per period: chart by hour or day, totals matching rtk gain, hook rewrites, projects with their worktrees and top commands. Readable for low vision (text scaling, WCAG AA contrast), English and Russian.",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "Widget.qml"
+  },
+  "barWidget": {
+    "displayName": "rtk",
+    "description": "rtk token savings with a per-project breakdown",
+    "category": "System",
+    "allowMultiple": false,
+    "defaultSection": "right",
+    "defaults": {
+      "period": "today",
+      "interval": 30,
+      "language": "auto",
+      "textSize": "Normal",
+      "animations": true,
+      "database": ""
+    },
+    "schema": [
+      {
+        "key": "period",
+        "type": "enum",
+        "label": "Popup period",
+        "options": [
+          "today",
+          "week",
+          "all"
+        ],
+        "defaultValue": "today",
+        "description": "today, the last 7 days, or all time. The popup's buttons change it too."
+      },
+      {
+        "key": "database",
+        "type": "path",
+        "label": "rtk history database",
+        "defaultValue": "",
+        "description": "Leave empty for rtk's own location (~/.local/share/rtk/history.db)."
+      },
+      {
+        "key": "language",
+        "type": "enum",
+        "label": "Language",
+        "options": [
+          "auto",
+          "en",
+          "ru"
+        ],
+        "defaultValue": "auto",
+        "description": "auto follows the system locale (Russian or English)."
+      },
+      {
+        "key": "textSize",
+        "type": "enum",
+        "label": "Text size",
+        "options": [
+          "Normal",
+          "Large",
+          "Extra large"
+        ],
+        "defaultValue": "Normal",
+        "description": "Scales the popup text. Text is never smaller than 13 px."
+      },
+      {
+        "key": "animations",
+        "type": "boolean",
+        "label": "Animations",
+        "description": "Turn off to stop the meters and columns from sliding."
+      },
+      {
+        "key": "interval",
+        "type": "number",
+        "label": "Refresh interval (seconds, at least 5)",
+        "description": "How often the bar total is re-read while the popup is closed."
+      }
+    ]
+  }
+}
