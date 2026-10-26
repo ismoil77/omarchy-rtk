@@ -34,6 +34,8 @@
 omarchy plugin add https://github.com/ismoil77/omarchy-rtk --enable
 ```
 
+Удалить: `omarchy plugin remove ismoil.rtk`; папку кэша `~/.cache/ismoil-rtk/` после этого можно стереть.
+
 Нужен сам `rtk` (виджет читает его базу истории, но не запускает его) и Python 3.9+.
 
 ## Настройки

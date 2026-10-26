@@ -35,6 +35,8 @@ the chart · `r` refresh · `Enter` full report · `Tab` next panel.
 omarchy plugin add https://github.com/ismoil77/omarchy-rtk --enable
 ```
 
+Remove it with `omarchy plugin remove ismoil.rtk`; the cache folder `~/.cache/ismoil-rtk/` can then be deleted.
+
 You need `rtk` itself (the widget reads its history database, it does not run it) and Python 3.9+.
 
 ## Settings
