@@ -110,15 +110,20 @@ function copies(cfg, n) { return I18n.count(Strings.tables, cfg.lang, "copies", 
 
 function periodLabel(cfg, period) { return tr(cfg, PERIOD_KEYS[period] || PERIOD_KEYS.today) }
 
+var ERROR_KEYS = { nodb: "errNoDb", busy: "errBusy", schema: "errSchema", unreadable: "errUnreadable", internal: "errInternal" }
+
 // The line under the title: "Saved 119.7K today", or why there is nothing yet.
 function subtitle(cfg, stats) {
   if (stats.ok) return tr(cfg, "savedLine", { n: tokens(cfg, stats.total.saved), since: tr(cfg, SINCE_KEYS[stats.period] || SINCE_KEYS.today) })
-  if (stats.error === "nodb") return tr(cfg, "errNoDb")
-  if (stats.error === "busy") return tr(cfg, "errBusy")
-  if (stats.error === "schema") return tr(cfg, "errSchema")
-  if (stats.error === "unreadable") return tr(cfg, "errUnreadable")
-  if (stats.error === "internal") return tr(cfg, "errInternal")
-  return tr(cfg, "loading")
+  if (!stats.error) return tr(cfg, "loading")
+  // A code this widget does not know (a newer stats.py) is still an error, not "Loading…".
+  return tr(cfg, ERROR_KEYS[stats.error] || "errInternal")
+}
+
+// Local calendar day of `date`, "YYYY-MM-DD": today's numbers kept across a busy
+// database are only good for the day they were read.
+function dayKey(date) {
+  return date.getFullYear() + "-" + ("0" + (date.getMonth() + 1)).slice(-2) + "-" + ("0" + date.getDate()).slice(-2)
 }
 
 function barLabel(cfg, today, ok) {
@@ -231,6 +236,16 @@ function slotTitle(cfg, period, slot, isNow) {
   if (isNow) return tr(cfg, "today")
   var d = slotDate(slot.key)
   return tr(cfg, "dayTitle", { weekday: tr(cfg, "wd" + d.getDay()), day: d.getDate(), month: tr(cfg, "mo" + d.getMonth()) })
+}
+
+// The longest title any slot can show, so the readout lays out the same for all.
+function slotTitleSample(cfg, period, slots) {
+  var widest = ""
+  ;(slots || []).forEach(function(s, i) {
+    var t = slotTitle(cfg, period, s, false)
+    if (t.length > widest.length) widest = t
+  })
+  return widest
 }
 
 function slotDetail(cfg, slot) {

@@ -114,6 +114,9 @@ test("subtitle: saved line, and why there is none", () => {
   assert.match(M.subtitle(en, { ok: false, error: "unreadable" }), /cannot be read/)
   assert.match(M.subtitle(en, { ok: false, error: "internal" }), /python3/)
   assert.match(M.subtitle(ru, { ok: false, error: "schema" }), /устройство/)
+  // A code from a newer stats.py is an error, never an endless "Loading…".
+  assert.match(M.subtitle(en, { ok: false, error: "from-the-future" }), /python3/)
+  assert.equal(M.subtitle(en, { ok: false, error: "" }), "Reading the database…")
   assert.equal(M.subtitle(ru, { ok: false, error: "" }), "Читаю базу…")
 })
 
@@ -182,6 +185,20 @@ test("chart ticks: every 6th hour, weekdays, ~5 dates in a month", () => {
 test("chart values", () => {
   same(M.chartValues([slot("a", 5, 9, 1), slot("b", undefined, 0, 0)]), [5, 0])
   same(M.chartValues(undefined), [])
+})
+
+test("the widest slot title sets the readout layout", () => {
+  const days = [slot("2026-10-20", 0, 0, 0), slot("2026-10-21", 0, 0, 0), slot("2026-10-22", 0, 0, 0)]
+  assert.equal(M.slotTitleSample(en, "week", days), "Tue, 20 Oct")
+  assert.equal(M.slotTitleSample(ru, "week", days), "вт, 20 окт")
+  assert.equal(M.slotTitleSample(en, "today", [slot("09", 0, 0, 0), slot("23", 0, 0, 0)]), "09:00–10:00")
+  assert.equal(M.slotTitleSample(en, "week", []), "")
+  assert.equal(M.slotTitleSample(en, "week", undefined), "")
+})
+
+test("dayKey is the local calendar day", () => {
+  assert.equal(M.dayKey(new Date(2026, 9, 5, 23, 59)), "2026-10-05")
+  assert.equal(M.dayKey(new Date(2026, 11, 31, 0, 0)), "2026-12-31")
 })
 
 test("slot title and detail", () => {

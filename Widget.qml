@@ -35,6 +35,7 @@ Panel {
 
   property var today: Model.emptyTotals()
   property bool todayOk: false
+  property string todayDay: ""
   property var stats: Model.empty(period)
   property string selected: ""
   property bool allProjects: false
@@ -93,8 +94,10 @@ Panel {
     if (next.todayOk) {
       today = next.today
       todayOk = true
-    } else if (next.error !== "busy") {
-      // Gone, unreadable or changed: do not keep showing a number that may be from yesterday.
+      todayDay = Model.dayKey(new Date())
+    } else if (next.error !== "busy" || todayDay !== Model.dayKey(new Date())) {
+      // Gone, unreadable or changed, or kept through a busy database past midnight:
+      // do not keep showing a number that may be from yesterday.
       todayOk = false
     }
     // The bar-only answer, or a late one for the period the user just left.
@@ -346,6 +349,7 @@ Panel {
             current: root.stats.chartNow
             cursor: root.cursor
             title: Model.slotTitle(root.cfg, root.stats.period, root.stats.chart[shown] || null, shown === current)
+            titleSample: Model.slotTitleSample(root.cfg, root.stats.period, root.stats.chart)
             detail: Model.slotDetail(root.cfg, root.stats.chart[shown] || null)
             detailSample: Model.slotDetailSample(root.cfg, root.stats.chart)
             onColumnHovered: function(index) { root.cursor = index }

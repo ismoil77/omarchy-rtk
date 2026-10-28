@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ismoil.rtk",
   "name": "rtk",
-  "version": "3.0.0",
+  "version": "3.0.1",
   "author": "ismoil",
   "license": "MIT",
   "description": "Tokens saved by rtk today in the bar, and a popup per period: chart by hour or day, totals matching rtk gain, hook rewrites, projects with their worktrees and top commands. Readable for low vision (text scaling, WCAG AA contrast), English and Russian.",

@@ -50,7 +50,7 @@ On the widget's entry in `~/.config/omarchy/shell.json`, or in the shell's setti
 | `textSize` | `Normal` | `Normal`, `Large`, `Extra large`. Text is never smaller than 13 px. |
 | `animations` | `true` | Turn off to stop the columns and meters from sliding. |
 | `interval` | `30` | Seconds between reads of the bar total while the popup is closed (at least 5). |
-| `database` | *(empty)* | Path to rtk's `history.db`. Empty means rtk's own location (`$XDG_DATA_HOME/rtk/history.db`). |
+| `database` | *(empty)* | Path to rtk's `history.db`. Empty means rtk's own location (`$XDG_DATA_HOME/rtk/history.db`, by default `~/.local/share/rtk/history.db`). |
 
 IPC: `omarchy-shell shell toggle ismoil.rtk '{}'`.
 
@@ -66,6 +66,8 @@ scrolls when large text outgrows the screen.
 The widget opens rtk's database **read-only** and never writes to it. It makes no network calls.
 The only thing it writes is a small cache of folder → project lookups in
 `$XDG_CACHE_HOME/ismoil-rtk/paths-v6.json`, so deleted worktrees still land in their project.
+That cache holds your project and worktree paths, so its folder is owner-only (0700) and its
+files 0600, whatever your umask; a cache left open by an older version is tightened on the next run.
 It runs `git` in your project folders to find the repository they belong to.
 
 ## Another language

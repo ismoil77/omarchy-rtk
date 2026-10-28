@@ -1,5 +1,22 @@
 # Changelog
 
+## 3.0.1
+
+- **Security: the cache is private.** `~/.cache/ismoil-rtk/` is now 0700 and its files 0600
+  whatever the umask (it lists your project and worktree paths). A cache left open by an older
+  version is tightened on load, not only on save, and a stale temp file cannot keep its old mode.
+  Reported in the marketplace review.
+- The readout above the chart no longer jumps between one and two lines while the pointer moves
+  over the columns: the layout is measured on the longest title, not the one on show.
+- A damaged cache entry (a non-numeric re-check time, an unknown kind) can no longer make the
+  reader fail with "internal"; such entries are dropped.
+- A database path with `#`, `?` or `%` opens (the SQLite URI is now quoted).
+- A changed hook log no longer turns the whole popup into the "layout changed" error: commands
+  still count and the hook figures read zero.
+- Commands with no folder count in the totals but no longer show up as a blank project.
+- An error code the widget does not know shows the generic error text instead of "Reading the
+  database…" forever; today's number kept through a busy database is dropped after midnight.
+
 ## 3.0.0
 
 - **English and Russian.** `language`: `auto` follows the system locale. Every word moved out of the

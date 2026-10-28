@@ -360,9 +360,43 @@ class ProjectGrouping(Base):
         self.assertEqual(p.of(b), p.of(a))
         self.assertEqual(p.of(a + "/gone/deeper"), p.of(a))
 
-    def test_empty_project_path(self):
-        found = self.projects(tmp="/nonexistent-tmp").of("")
-        self.assertEqual(found[3], "folder")
+    def test_a_command_with_no_folder_counts_but_is_not_a_project(self):
+        self.add(local(2026, 10, 26, 9), path="")
+        self.add(local(2026, 10, 26, 10), path=self.repo("app"))
+        r = self.run_stats("today")
+        self.assertEqual(r["total"]["commands"], 2)
+        self.assertEqual([p["name"] for p in r["projects"]], ["app"])
+
+    def test_damaged_entries_never_crash_the_stale_check(self):
+        os.makedirs(os.path.dirname(self.cache_path))
+        folder = os.path.join(self.dir, "plain")
+        os.makedirs(folder)
+        with open(self.cache_path, "w") as f:
+            json.dump({folder: [folder, "plain", "", "folder", None],
+                       "/a": ["/a", "a", "", "bogus"],
+                       "/b": ["/b", "b", "", "folder", "soon"]}, f)
+        p = self.projects(tmp="/nonexistent-tmp")
+        self.assertEqual(list(p.cache), [])
+        self.assertEqual(p.of(folder)[3], "folder")
+
+    def test_a_stale_tmp_and_an_open_cache_are_tightened_without_saving(self):
+        os.makedirs(os.path.dirname(self.cache_path))
+        os.chmod(os.path.dirname(self.cache_path), 0o755)
+        with open(self.cache_path, "w") as f:
+            f.write("{}")
+        os.chmod(self.cache_path, 0o644)
+        self.projects()  # a bar that never opens its popup never saves
+        self.assertEqual(os.stat(self.cache_path).st_mode & 0o777, 0o600)
+        self.assertEqual(os.stat(os.path.dirname(self.cache_path)).st_mode & 0o777, 0o700)
+        stale = "%s.%d.tmp" % (self.cache_path, os.getpid())
+        with open(stale, "w") as f:
+            f.write("old")
+        os.chmod(stale, 0o644)
+        p = self.projects()
+        p.of(self.repo("app"))
+        p.save()
+        self.assertFalse(os.path.exists(stale))
+        self.assertEqual(os.stat(self.cache_path).st_mode & 0o777, 0o600)
 
     def test_a_deleted_worktree_stays_in_its_project(self):
         main = self.repo("app")
@@ -377,6 +411,24 @@ class ProjectGrouping(Base):
         after = self.projects()  # a new run reads the cache from disk
         self.assertEqual(after.of(wt), [main, "app", "app-lane9", "repo"])
         self.assertEqual(after.of(sub)[:2], [main, "app"])
+
+    def test_the_cache_is_private_to_the_owner(self):
+        """It holds project and worktree names: no other local user may read them,
+        even under umask 022 and over a folder or file an older version left open."""
+        os.makedirs(os.path.dirname(self.cache_path))
+        os.chmod(os.path.dirname(self.cache_path), 0o755)
+        with open(self.cache_path, "w") as f:
+            f.write("{}")
+        os.chmod(self.cache_path, 0o644)
+        old = os.umask(0o022)
+        try:
+            p = self.projects()
+            p.of(self.repo("app"))
+            p.save()
+        finally:
+            os.umask(old)
+        self.assertEqual(os.stat(self.cache_path).st_mode & 0o777, 0o600)
+        self.assertEqual(os.stat(os.path.dirname(self.cache_path)).st_mode & 0o777, 0o700)
 
     def test_a_deleted_folder_inside_a_live_repo(self):
         main = self.repo("app")
@@ -537,13 +589,36 @@ class Failures(Base):
     def test_a_schema_change_is_its_own_code_and_today_survives(self):
         self.add(local(2026, 10, 26, 9), inp=1000, out=400)
         db = sqlite3.connect(self.db_path)
-        db.execute("drop table hook_decisions")
+        db.execute("alter table commands drop column exec_time_ms")
         db.commit()
         db.close()
         r = self.run_stats("week")
         self.assertEqual((r["ok"], r["error"]), (False, "schema"))
         self.assertTrue(r["todayOk"])
         self.assertEqual(r["today"]["saved"], 600)
+
+    def test_a_changed_hook_log_does_not_take_the_commands_down(self):
+        self.add(local(2026, 10, 26, 9), inp=1000, out=400)
+        db = sqlite3.connect(self.db_path)
+        db.execute("drop table hook_decisions")
+        db.commit()
+        db.close()
+        r = self.run_stats("week")
+        self.assertTrue(r["ok"])
+        self.assertEqual(r["total"]["saved"], 600)
+        self.assertEqual(r["hook"], {"seen": 0, "rewritten": 0, "passed": 0})
+        self.assertEqual(r["version"], "")
+
+    def test_a_database_path_with_uri_characters_opens(self):
+        odd = os.path.join(self.dir, "a#b?c%d")
+        os.makedirs(odd)
+        moved = os.path.join(odd, "history.db")
+        shutil.copy(self.db_path, moved)
+        self.db_path = moved
+        self.add(local(2026, 10, 26, 9), inp=1000, out=400)
+        r = self.run_stats("today")
+        self.assertTrue(r["ok"], r)
+        self.assertEqual(r["total"]["saved"], 600)
 
     def test_an_older_schema_without_project_path_is_a_schema_error(self):
         db = sqlite3.connect(self.db_path)

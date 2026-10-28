@@ -25,6 +25,7 @@ import sqlite3
 import subprocess
 import sys
 import time
+import urllib.parse
 from datetime import datetime, timedelta, timezone
 
 # HEADLINE_INPUT_CAP_TOKENS in rtk (src/core/tracking.rs).
@@ -112,6 +113,7 @@ def repo_of(path):
 
 
 UNKNOWN = object()
+KINDS = ("repo", "folder", "tmp", "home")
 # A folder outside git is looked at again after this long: it may have become a repo.
 RECHECK_SECONDS = 24 * 3600
 
@@ -132,7 +134,17 @@ class Projects:
         self.home = home or os.path.expanduser("~")
         self.tmp = tmp
         self.clock = clock
+        self._tighten()
         self.cache = self._load()
+
+    def _tighten(self):
+        """Owner-only folder and file, also for what an older version left open:
+        a bar that never opens its popup never saves, so this cannot wait for save()."""
+        try:
+            os.chmod(os.path.dirname(self.cache_path), 0o700)
+            os.chmod(self.cache_path, 0o600)
+        except OSError:
+            pass
 
     def _load(self):
         try:
@@ -142,16 +154,34 @@ class Projects:
             return {}
         if not isinstance(data, dict):
             return {}
-        # Entries from a damaged or older file are dropped, not trusted.
-        return {k: v for k, v in data.items()
-                if isinstance(v, list) and len(v) in (4, 5) and all(isinstance(x, str) for x in v[:4])}
+        # Entries that do not have the expected shape are dropped, not trusted.
+        return {k: v for k, v in data.items() if self._shaped(v)}
+
+    @staticmethod
+    def _shaped(v):
+        if not isinstance(v, list) or len(v) not in (4, 5) or not all(isinstance(x, str) for x in v[:4]):
+            return False
+        if v[3] not in KINDS:
+            return False
+        if len(v) == 5:
+            try:
+                float(v[4])
+            except (TypeError, ValueError):
+                return False
+        return True
 
     def save(self):
         try:
-            os.makedirs(os.path.dirname(self.cache_path), exist_ok=True)
+            # The cache holds private project and worktree paths: owner-only,
+            # whatever the umask and whatever an older version left behind.
+            folder = os.path.dirname(self.cache_path)
+            os.makedirs(folder, mode=0o700, exist_ok=True)
+            os.chmod(folder, 0o700)
             # Two bar instances (one per monitor) may save at the same time.
             tmp = "%s.%d.tmp" % (self.cache_path, os.getpid())
-            with open(tmp, "w") as f:
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            os.fchmod(fd, 0o600)  # a stale tmp from an older run keeps its old mode otherwise
+            with os.fdopen(fd, "w") as f:
                 json.dump(self.cache, f, ensure_ascii=False)
             os.replace(tmp, self.cache_path)
         except OSError:
@@ -171,7 +201,7 @@ class Projects:
             return False
         try:
             return self.clock() - float(entry[4]) > RECHECK_SECONDS and os.path.isdir(path)
-        except ValueError:
+        except (ValueError, TypeError):
             return True
 
     def _folder(self, path):
@@ -316,6 +346,22 @@ def chart(db, now, period):
                       "input": sums.get(k, (0, 0, 0))[2]} for k, label in slots]
 
 
+def hook_decisions(db, since):
+    """({decision: count}, rtk version) from the hook log. The log is a side
+    dish: if rtk changed its layout, the commands still count and the hook
+    figures read zero. Any other error (busy, I/O) is still the caller's."""
+    try:
+        decisions = dict(db.execute(
+            "select decision, count(*) from hook_decisions where timestamp >= ? group by 1", (since,)).fetchall())
+        # The rtk that actually handles commands, read without running it.
+        row = db.execute("select rtk_version from hook_decisions order by id desc limit 1").fetchone()
+    except sqlite3.OperationalError as e:
+        if error_code(e) != "schema":
+            raise
+        return {}, ""
+    return decisions, row[0] if row else ""
+
+
 def full(db, now, period, projects):
     start = period_start(now, period)
     since = utc(start) if start else ""
@@ -328,12 +374,11 @@ def full(db, now, period, projects):
         (since,)).fetchall()
     oversized = db.execute(
         "select count(*) from commands where timestamp >= ? and not (%s)" % COUNTED, (since,)).fetchone()[0]
-    decisions = dict(db.execute(
-        "select decision, count(*) from hook_decisions where timestamp >= ? group by 1", (since,)).fetchall())
+    decisions, version = hook_decisions(db, since)
 
     # Live folders first: they teach the cache where each repo is, so a deleted
     # copy of it is placed correctly whatever order the rows come in.
-    paths = sorted({row["project_path"] or "" for row in rows}, key=lambda p: (not os.path.isdir(p), p))
+    paths = sorted({row["project_path"] for row in rows if row["project_path"]}, key=lambda p: (not os.path.isdir(p), p))
     placed = {path: projects.of(path) for path in paths}
 
     total = bucket()
@@ -341,12 +386,14 @@ def full(db, now, period, projects):
     by_project = {}
     worse = 0
     for row in rows:
-        key, name, copy, kind = placed[row["project_path"] or ""]
         command = command_name(row["rtk_cmd"])
         worse += row["worse"]
 
         add(total, row)
         add(commands.setdefault(command, bucket()), row)
+        if not row["project_path"]:
+            continue  # counted above; a command with no folder is not a project
+        key, name, copy, kind = placed[row["project_path"]]
         p = by_project.setdefault(key, {"name": name, "kind": kind, "stats": bucket(), "copies": {}, "top": {}})
         add(p["stats"], row)
         add(p["copies"].setdefault(copy, bucket()), row)
@@ -376,12 +423,9 @@ def full(db, now, period, projects):
     rewritten = decisions.get("allow", 0) + decisions.get("ask", 0)
     passed = decisions.get("defer", 0) + decisions.get("deny", 0)
 
-    # The rtk that actually handles commands, read without running it.
-    version = db.execute("select rtk_version from hook_decisions order by id desc limit 1").fetchone()
-
     current, slots = chart(db, now, period)
     return {
-        "version": version[0] if version else "",
+        "version": version,
         "total": finish(total),
         "chart": slots,
         "chartNow": current,
@@ -413,7 +457,7 @@ def summarize(db_path, cache_path, period, now=None):
         result["error"] = "nodb"
         return result
     try:
-        db = sqlite3.connect("file:" + db_path + "?mode=ro", uri=True, timeout=BUSY_TIMEOUT)
+        db = sqlite3.connect("file:" + urllib.parse.quote(os.path.abspath(db_path)) + "?mode=ro", uri=True, timeout=BUSY_TIMEOUT)
         db.row_factory = sqlite3.Row
         try:
             result["today"] = today_totals(db, now)
