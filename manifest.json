@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ismoil.rtk",
   "name": "rtk",
-  "version": "3.2.1",
+  "version": "3.3.0",
   "author": "ismoil",
   "license": "MIT",
   "description": "Tokens rtk saved your AI agent: today's total in the bar, a chart by hour or day, projects with their worktrees and the top commands. The same numbers as rtk gain. Reads rtk's history read-only, only when rtk writes. English and Russian.",

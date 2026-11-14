@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.3.0
+
+- **First run in the widget.** With no history yet the popup says which step is missing: a link to
+  rtk's install guide when rtk is not installed, or a command to try when it has not run yet.
+
 ## 3.2.1
 
 - A landscape banner as the marketplace preview (the card crops a strip from the centre, a tall popup

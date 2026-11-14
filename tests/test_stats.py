@@ -621,6 +621,7 @@ class ProjectGrouping(Base):
 class Failures(Base):
     def test_no_database(self):
         r = stats.summarize(os.path.join(self.dir, "missing.db"), self.cache_path, "today", self.now)
+        self.assertIn(r["installed"], (True, False))
         self.assertEqual((r["ok"], r["error"], r["todayOk"]), (False, "nodb", False))
 
     def test_a_file_that_is_not_a_database_is_unreadable(self):

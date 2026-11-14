@@ -326,6 +326,33 @@ Panel {
               toneText: skin.accentText
             }
 
+            // ---------- First run: no history yet ----------
+            Kit.Section {
+              visible: root.stats.error === "nodb"
+              width: parent.width
+              look: skin
+              caption: root.tr("setupCaption")
+              spacing: Style.space(10)
+
+              Text {
+                width: parent.width
+                textFormat: Text.PlainText
+                text: root.stats.installed === true ? root.tr("setupIdle") : root.tr("setupMissing")
+                color: skin.ink
+                font.family: skin.fontFamily
+                font.pixelSize: skin.small
+                wrapMode: Text.WordWrap
+              }
+
+              Kit.ActionButton {
+                visible: root.stats.installed !== true
+                look: skin
+                primary: true
+                text: root.tr("setupGuide")
+                onClicked: { root.close(); Util.execArgv(["xdg-open", "https://github.com/rtk-ai/rtk#installation"]) }
+              }
+            }
+
             // ---------- Period picker ----------
             Row {
               width: parent.width

@@ -23,6 +23,7 @@ import fcntl
 import glob
 import json
 import os
+import shutil
 import sqlite3
 import subprocess
 import sys
@@ -469,6 +470,8 @@ def summarize(db_path, cache_path, period, now=None):
     tighten_cache(cache_path)
     if not os.path.exists(db_path):
         result["error"] = "nodb"
+        # Tells "rtk is not here yet" from "rtk has not run yet" for the first-run hint.
+        result["installed"] = shutil.which("rtk") is not None
         return result
     try:
         db = sqlite3.connect("file:" + urllib.parse.quote(os.path.abspath(db_path)) + "?mode=ro", uri=True, timeout=BUSY_TIMEOUT)

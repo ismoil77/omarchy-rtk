@@ -43,8 +43,9 @@ Remove it with `omarchy plugin remove ismoil.rtk`; the cache folder `~/.cache/is
 
 That one command is the whole installation: the widget needs no setup, no service and no root.
 It shows numbers as soon as [rtk](https://github.com/rtk-ai/rtk) has a history on this machine (the
-widget only reads rtk's database, it does not run or configure rtk); until then it says "rtk has no
-history yet". Python 3.9+ is the only other dependency.
+widget only reads rtk's database, it does not run or configure rtk). Until then the popup says so and
+tells you the next step: a link to rtk's install guide when rtk is missing, or a command to try when
+it has not run yet. Python 3.9+ is the only other dependency.
 
 ## Settings
 
