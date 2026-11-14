@@ -197,12 +197,21 @@ Panel {
   implicitWidth: button.implicitWidth
   implicitHeight: button.implicitHeight
 
+  TextMetrics {
+    id: barLabelMetrics
+    font.family: button.fontFamily
+    font.pixelSize: button.fontSize
+    text: button.labelText
+  }
+
   BarIconButton {
     id: button
     anchors.fill: parent
     bar: root.bar
-    text: root.vertical ? root.icon : root.icon + " " + Model.barLabel(root.cfg, root.today, root.todayOk)
-    slotSize: root.vertical ? Style.bar.iconSlot : Math.ceil(button.glyphPaintedWidth) + Style.space(14)
+    // Omarchy 4.5: `text` is a single icon glyph; the number goes in `labelText`.
+    text: root.icon
+    labelText: root.vertical ? "" : Model.barLabel(root.cfg, root.today, root.todayOk)
+    slotSize: root.vertical ? Style.bar.iconSlot : Math.ceil(button.canvasSize + barLabelMetrics.width + Style.space(4)) + Style.space(14)
     tooltipText: root.opened ? "" : Model.tooltip(root.cfg, root.today, root.todayOk)
     onPressed: function(b) {
       if (b === Qt.RightButton) root.refresh()

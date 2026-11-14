@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.0.2
+
+- **Security: the bar alone closes an old open cache.** 3.0.1 tightened a cache left readable by
+  an older version only when the popup opened. Now every run does it, the bar's `stats.py bar`
+  included, and leftover `paths-v6.json.*.tmp` files are made 0600 too. Reported in the
+  marketplace review.
+- Omarchy 4.5 bar: the icon is the button's glyph and today's number is its `labelText`.
+
 ## 3.0.1
 
 - **Security: the cache is private.** `~/.cache/ismoil-rtk/` is now 0700 and its files 0600

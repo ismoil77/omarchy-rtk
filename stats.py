@@ -19,6 +19,7 @@ worktrees and copies of one repo are a single row with the copies listed
 inside.
 """
 import argparse
+import glob
 import json
 import os
 import sqlite3
@@ -118,6 +119,18 @@ KINDS = ("repo", "folder", "tmp", "home")
 RECHECK_SECONDS = 24 * 3600
 
 
+def tighten_cache(cache_path):
+    """Owner-only cache folder, cache file and leftover temp files, also what an
+    older version left open. Runs on every call, the bar's included: a bar that
+    never opens its popup never saves, so this cannot wait for save()."""
+    leftovers = glob.glob(glob.escape(cache_path) + ".*.tmp")
+    for path, mode in [(os.path.dirname(cache_path), 0o700), (cache_path, 0o600)] + [(t, 0o600) for t in leftovers]:
+        try:
+            os.chmod(path, mode)
+        except OSError:
+            pass
+
+
 class Projects:
     """Maps a project path from the history to [id, name, copy, kind].
 
@@ -138,13 +151,7 @@ class Projects:
         self.cache = self._load()
 
     def _tighten(self):
-        """Owner-only folder and file, also for what an older version left open:
-        a bar that never opens its popup never saves, so this cannot wait for save()."""
-        try:
-            os.chmod(os.path.dirname(self.cache_path), 0o700)
-            os.chmod(self.cache_path, 0o600)
-        except OSError:
-            pass
+        tighten_cache(self.cache_path)
 
     def _load(self):
         try:
@@ -453,6 +460,7 @@ def summarize(db_path, cache_path, period, now=None):
     kept whenever it could be read, even if the rest could not."""
     now = now or datetime.now().astimezone()
     result = {"ok": False, "period": period, "todayOk": False}
+    tighten_cache(cache_path)
     if not os.path.exists(db_path):
         result["error"] = "nodb"
         return result

@@ -398,6 +398,25 @@ class ProjectGrouping(Base):
         self.assertFalse(os.path.exists(stale))
         self.assertEqual(os.stat(self.cache_path).st_mode & 0o777, 0o600)
 
+    def test_the_bar_alone_tightens_what_an_older_version_left_open(self):
+        """The popup never opens: `bar` runs only, Projects is never built."""
+        folder = os.path.dirname(self.cache_path)
+        os.makedirs(folder)
+        os.chmod(folder, 0o755)
+        stale = "%s.%d.tmp" % (self.cache_path, 4242)
+        for path in (self.cache_path, stale):
+            with open(path, "w") as f:
+                f.write("{}")
+            os.chmod(path, 0o644)
+        for db in (self.db_path, os.path.join(self.dir, "missing.db")):
+            os.chmod(folder, 0o755)
+            os.chmod(self.cache_path, 0o644)
+            os.chmod(stale, 0o644)
+            stats.summarize(db, self.cache_path, "bar", self.now)
+            self.assertEqual(os.stat(folder).st_mode & 0o777, 0o700, db)
+            self.assertEqual(os.stat(self.cache_path).st_mode & 0o777, 0o600, db)
+            self.assertEqual(os.stat(stale).st_mode & 0o777, 0o600, db)
+
     def test_a_deleted_worktree_stays_in_its_project(self):
         main = self.repo("app")
         wt = os.path.join(self.dir, "app-lane9")
