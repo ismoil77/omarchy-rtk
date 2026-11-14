@@ -411,15 +411,10 @@ Panel {
           }
 
           // ---------- Saved · commands: the meter's accent part is what rtk cut ----------
-          Grid {
-            id: tiles
+          Kit.TileRow {
             width: parent.width
-            columns: 2
-            spacing: Style.space(8)
-            readonly property real cell: (width - spacing) / 2
 
             Kit.Tile {
-              width: tiles.cell
               look: skin
               caption: root.tr("tileSaved")
               value: Model.tokens(root.cfg, root.stats.total.saved)
@@ -429,7 +424,6 @@ Panel {
             }
 
             Kit.Tile {
-              width: tiles.cell
               look: skin
               caption: root.tr("tileCommands")
               value: String(root.stats.total.commands)
