@@ -1,5 +1,10 @@
 # Changelog
 
+## 3.1.1
+
+- Security (marketplace review): git runs with the project folder as its working directory instead of
+  `git -C <path>`, so no private project path appears on a command line other accounts can read.
+
 ## 3.1.0
 
 - **Reads only when rtk wrote something.** The database folder is watched (rtk opens and drops

@@ -89,9 +89,14 @@ def period_start(now, period):
 # ---------- projects ----------
 
 def git(path, *args):
-    """git's answer, "" when git says no, None when it could not be asked."""
+    """git's answer, "" when git says no, None when it could not be asked.
+
+    The folder is git's working directory, never an argument: any local account
+    can read a process's command line, only its owner can read where it runs."""
+    if not os.path.isdir(path):
+        return ""  # gone or not a folder: what `git -C` answered too
     try:
-        out = subprocess.run(["git", "-C", path, *args], capture_output=True, text=True, timeout=2)
+        out = subprocess.run(["git", *args], cwd=path, capture_output=True, text=True, timeout=2)
     except (OSError, subprocess.TimeoutExpired):
         return None
     return out.stdout.strip() if out.returncode == 0 else ""

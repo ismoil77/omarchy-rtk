@@ -437,6 +437,22 @@ class ProjectGrouping(Base):
             stats.cached_bar(self.db_path, self.cache_path)
             self.assertEqual(calls, ["bar", "bar"])
 
+    def test_project_paths_never_reach_a_command_line(self):
+        """Other local accounts can read argv (/proc/PID/cmdline), not the cwd."""
+        repo = self.repo("secret-project")
+        seen = []
+        real = subprocess.run
+        def watch(cmd, *a, **k):
+            seen.append((cmd, k.get("cwd")))
+            return real(cmd, *a, **k)
+        with mock.patch.object(stats.subprocess, "run", watch):
+            self.assertIsNotNone(stats.git(repo, "rev-parse", "--show-toplevel"))
+            self.assertEqual(stats.git(os.path.join(repo, "gone"), "rev-parse", "--show-toplevel"), "")
+        self.assertTrue(seen)
+        for cmd, cwd in seen:
+            self.assertFalse(any("secret-project" in str(part) for part in cmd), cmd)
+            self.assertEqual(cwd, repo)
+
     def test_a_deleted_worktree_stays_in_its_project(self):
         main = self.repo("app")
         wt = os.path.join(self.dir, "app-lane9")
