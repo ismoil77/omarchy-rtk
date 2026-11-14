@@ -7,7 +7,11 @@ always agree. Readable for people with low vision; English and Russian.
 
 [Русская версия](README.ru.md)
 
-![The popup](docs/preview-en.png)
+![rtk](preview.png)
+
+| English | Русский |
+|---|---|
+| ![the popup](docs/preview-en.png) | ![окно](docs/preview-ru.png) |
 
 In the bar: `󰓅 83.8K` — tokens saved today.
 Left click opens the popup, right click refreshes, middle click opens `rtk gain --graph` in a
@@ -37,7 +41,10 @@ omarchy plugin add https://github.com/ismoil77/omarchy-rtk --enable
 
 Remove it with `omarchy plugin remove ismoil.rtk`; the cache folder `~/.cache/ismoil-rtk/` can then be deleted.
 
-You need `rtk` itself (the widget reads its history database, it does not run it) and Python 3.9+.
+That one command is the whole installation: the widget needs no setup, no service and no root.
+It shows numbers as soon as [rtk](https://github.com/rtk-ai/rtk) has a history on this machine (the
+widget only reads rtk's database, it does not run or configure rtk); until then it says "rtk has no
+history yet". Python 3.9+ is the only other dependency.
 
 ## Settings
 

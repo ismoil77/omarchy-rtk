@@ -2,10 +2,10 @@
   "schemaVersion": 1,
   "id": "ismoil.rtk",
   "name": "rtk",
-  "version": "3.2.0",
+  "version": "3.2.1",
   "author": "ismoil",
   "license": "MIT",
-  "description": "Tokens saved by rtk today in the bar, and a popup per period: chart by hour or day, totals matching rtk gain, hook rewrites, projects with their worktrees and top commands. Readable for low vision (text scaling, WCAG AA contrast), English and Russian.",
+  "description": "Tokens rtk saved your AI agent: today's total in the bar, a chart by hour or day, projects with their worktrees and the top commands. The same numbers as rtk gain. Reads rtk's history read-only, only when rtk writes. English and Russian.",
   "kinds": [
     "bar-widget"
   ],
@@ -14,7 +14,7 @@
   },
   "barWidget": {
     "displayName": "rtk",
-    "description": "rtk token savings with a per-project breakdown",
+    "description": "Tokens saved by rtk: today, by period, by project",
     "category": "System",
     "allowMultiple": false,
     "defaultSection": "right",
