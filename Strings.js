@@ -27,6 +27,8 @@ var en = {
 
   reached: "Reached model {n}",
   tileSaved: "Saved",
+  savedSay: "saved, {pct} of the tokens",
+  columnsHint: "commands · tokens · %",
   tileCommands: "Commands",
   tileAvg: "average {n} ms",
   without: "{n} without rtk",
@@ -90,6 +92,8 @@ var ru = {
 
   reached: "Дошло до модели {n}",
   tileSaved: "Сэкономлено",
+  savedSay: "сэкономлено, это {pct} токенов",
+  columnsHint: "команд · токенов · %",
   tileCommands: "Команды",
   tileAvg: "в среднем {n} мс",
   without: "{n} без rtk",

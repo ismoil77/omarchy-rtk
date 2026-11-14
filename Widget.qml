@@ -65,6 +65,10 @@ Panel {
 
   function tr(key, params) { return Model.tr(cfg, key, params) }
 
+  // The version for the signature, from the manifest so it never drifts.
+  FileView { id: manifestFile; path: root.localPath(Qt.resolvedUrl("manifest.json")); blockLoading: true }
+  readonly property string version: { try { return JSON.parse(manifestFile.text()).version || "" } catch (e) { return "" } }
+
   // file:///a%20b/x.py -> /a b/x.py
   function localPath(url) {
     return decodeURIComponent(String(url).replace(/^file:\/\//, ""))
@@ -294,73 +298,16 @@ Panel {
           width: scroller.width
           spacing: Style.space(12)
 
-          // ---------- Hero: icon · title and what was saved · percent ----------
-          Item {
+          Kit.Header {
             width: parent.width
-            implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight, heroPercent.implicitHeight)
-
-            Rectangle {
-              id: heroIcon
-              width: Math.round(skin.hero * 1.7)
-              height: width
-              radius: skin.radius
-              color: Util.alpha(skin.accentFill, 0.16)
-              anchors.left: parent.left
-              anchors.verticalCenter: parent.verticalCenter
-
-              Text {
-                anchors.centerIn: parent
-                textFormat: Text.PlainText
-                text: root.icon
-                color: skin.accentText
-                font.family: skin.fontFamily
-                font.pixelSize: skin.hero
-              }
-            }
-
-            Column {
-              id: heroLabels
-              anchors.left: heroIcon.right
-              anchors.leftMargin: Style.space(14)
-              anchors.right: heroPercent.left
-              anchors.rightMargin: Style.space(10)
-              anchors.verticalCenter: parent.verticalCenter
-              spacing: Style.space(2)
-
-              Text {
-                textFormat: Text.PlainText
-                text: root.tr("title") + (root.stats.version ? " " + root.stats.version : "")
-                color: skin.ink
-                font.family: skin.fontFamily
-                font.pixelSize: skin.strong
-                font.bold: true
-                elide: Text.ElideRight
-                width: parent.width
-              }
-
-              Text {
-                textFormat: Text.PlainText
-                text: Model.subtitle(root.cfg, root.stats)
-                color: skin.dim
-                font.family: skin.fontFamily
-                font.pixelSize: skin.small
-                wrapMode: Text.WordWrap
-                width: parent.width
-              }
-            }
-
-            Text {
-              id: heroPercent
-              textFormat: Text.PlainText
-              text: root.stats.ok ? Model.pct(root.stats.total.pct) : "—"
-              color: skin.accentText
-              font.family: skin.fontFamily
-              font.pixelSize: skin.heroLarge
-              font.bold: true
-              font.features: { "tnum": 1 }
-              anchors.right: parent.right
-              anchors.verticalCenter: parent.verticalCenter
-            }
+            look: skin
+            glyph: root.icon
+            name: root.tr("title") + " · " + Model.periodLabel(root.cfg, root.period)
+            value: root.stats.ok ? Model.tokens(root.cfg, root.stats.total.saved) : "—"
+            say: root.stats.ok ? root.tr("savedSay", { pct: Model.pct(root.stats.total.pct) }) : Model.subtitle(root.cfg, root.stats)
+            chip: root.stats.ok ? Model.commands(root.cfg, root.stats.total.commands) : ""
+            tone: skin.accentFill
+            toneText: skin.accentText
           }
 
           // ---------- Period picker ----------
@@ -371,18 +318,14 @@ Panel {
             Repeater {
               model: Model.PERIODS
 
-              delegate: Button {
+              delegate: Kit.ActionButton {
                 required property var modelData
                 required property int index
+                look: skin
+                compact: true
                 width: (parent.width - parent.spacing * 2) / 3
                 text: Model.periodLabel(root.cfg, modelData)
-                tooltipText: root.tr("periodKey", { n: index + 1 })
                 selected: root.period === modelData
-                bordered: true
-                foreground: skin.ink
-                fontFamily: skin.fontFamily
-                fontSize: skin.small
-                verticalPadding: Style.space(3)
                 onClicked: root.setPeriod(modelData)
               }
             }
@@ -410,34 +353,22 @@ Panel {
           }
           }
 
-          // ---------- Saved · commands: the meter's accent part is what rtk cut ----------
-          Kit.TileRow {
-            width: parent.width
-
-            Kit.Tile {
-              look: skin
-              caption: root.tr("tileSaved")
-              value: Model.tokens(root.cfg, root.stats.total.saved)
-              valueColor: skin.accentText
-              fraction: Model.fraction(root.stats.total.saved, root.stats.total.input)
-              detail: root.tr("without", { n: Model.tokens(root.cfg, root.stats.total.input) })
-            }
-
-            Kit.Tile {
-              look: skin
-              caption: root.tr("tileCommands")
-              value: String(root.stats.total.commands)
-              detail: root.tr("tileAvg", { n: root.stats.total.avgMs })
-            }
-          }
-
-          Kit.Card {
+          // ---------- Where the tokens went ----------
+          Kit.Section {
             width: parent.width
             look: skin
             spacing: Style.spacing.labelGap
 
+            Kit.Meter {
+              width: parent.width
+              look: skin
+              fromRight: true
+              fraction: Model.fraction(root.stats.total.saved, root.stats.total.input)
+            }
             Kit.InfoPair { look: skin; label: root.tr("reached", { n: "" }).trim(); value: Model.tokens(root.cfg, root.stats.total.output) }
+            Kit.InfoPair { look: skin; label: root.tr("without", { n: "" }).trim(); value: Model.tokens(root.cfg, root.stats.total.input) }
             Kit.InfoPair { look: skin; label: root.tr("rowHook"); value: Model.rewriteShare(root.cfg, root.stats.hook) }
+            Kit.InfoPair { look: skin; label: root.tr("rowAvg"); value: root.tr("rowAvgValue", { n: root.stats.total.avgMs }) }
             // rtk printed more than the raw command (git add, git fetch); like
             // `rtk gain`, those rows count as zero saved, not as a loss.
             Kit.InfoPair {
@@ -458,19 +389,13 @@ Panel {
           }
 
           // ---------- Projects ----------
-          Kit.Card {
+          Kit.Section {
             id: projectList
             width: parent.width
             look: skin
-            spacing: Style.space(3)
-
-            PanelSectionHeader {
-              text: root.tr("sectionProjects").toUpperCase()
-              foreground: skin.ink
-              fontFamily: skin.fontFamily
-              fontSize: skin.small
-              color: skin.dim
-            }
+            caption: root.tr("sectionProjects")
+            hint: root.tr("columnsHint")
+            spacing: Style.space(4)
 
             Text {
               visible: root.stats.projects.length === 0
@@ -507,20 +432,14 @@ Panel {
           }
 
           // ---------- Selected project: its copies ----------
-          Kit.Card {
+          Kit.Section {
             id: copyList
             visible: root.project !== null && root.project.copies.length > 1
             width: parent.width
             look: skin
-            spacing: Style.space(3)
-
-            PanelSectionHeader {
-              text: root.project ? root.tr("sectionCopies", { name: Model.projectName(root.cfg, root.project) }).toUpperCase() : ""
-              foreground: skin.ink
-              fontFamily: skin.fontFamily
-              fontSize: skin.small
-              color: skin.dim
-            }
+            caption: root.project ? root.tr("sectionCopies", { name: Model.projectName(root.cfg, root.project) }) : ""
+            hint: root.tr("columnsHint")
+            spacing: Style.space(4)
 
             Repeater {
               model: root.project ? Model.visibleRows(root.project.copies, root.allCopies) : []
@@ -545,20 +464,14 @@ Panel {
           }
 
           // ---------- Top commands (selected project or everything) ----------
-          Kit.Card {
+          Kit.Section {
             id: commandList
             visible: root.topCommands.length > 0
             width: parent.width
             look: skin
-            spacing: Style.space(3)
-
-            PanelSectionHeader {
-              text: (root.project ? root.tr("sectionTopOf", { name: Model.projectName(root.cfg, root.project) }) : root.tr("sectionTop")).toUpperCase()
-              foreground: skin.ink
-              fontFamily: skin.fontFamily
-              fontSize: skin.small
-              color: skin.dim
-            }
+            caption: root.project ? root.tr("sectionTopOf", { name: Model.projectName(root.cfg, root.project) }) : root.tr("sectionTop")
+            hint: root.tr("columnsHint")
+            spacing: Style.space(4)
 
             Repeater {
               model: root.topCommands
@@ -577,45 +490,30 @@ Panel {
           }
 
           // ---------- Actions ----------
-
-          Row {
-            id: actionRow
+          Kit.ActionRow {
             width: parent.width
-            spacing: Style.space(6)
 
-            readonly property real cellWidth: (width - spacing) / 2
-            readonly property real buttonHeight: Math.max(reportButton.implicitHeight, refreshButton.implicitHeight)
-
-            Button {
-              id: reportButton
-              width: actionRow.cellWidth
-              height: actionRow.buttonHeight
+            Kit.ActionButton {
+              look: skin
               iconText: "󰆍"
-              iconSize: skin.strong
               text: root.tr("report")
-              tooltipText: root.tr("reportTip")
-              fontSize: skin.small
-              foreground: skin.ink
-              fontFamily: skin.fontFamily
-              bordered: true
+              primary: true
               onClicked: root.openReport()
             }
-
-            Button {
-              id: refreshButton
-              width: actionRow.cellWidth
-              height: actionRow.buttonHeight
+            Kit.ActionButton {
+              look: skin
               iconText: "󰑐"
-              iconSpinning: statsProc.running
-              iconSize: skin.strong
               text: root.tr("refresh")
-              tooltipText: root.tr("refreshTip")
-              fontSize: skin.small
-              foreground: skin.ink
-              fontFamily: skin.fontFamily
-              bordered: true
               onClicked: root.refresh()
             }
+          }
+
+          Kit.Signature {
+            width: parent.width
+            look: skin
+            widget: "rtk"
+            extra: root.stats.version ? "rtk " + root.stats.version : ""
+            version: root.version
           }
         }
       }
