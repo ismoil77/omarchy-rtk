@@ -26,6 +26,9 @@ var en = {
   tipNone: "rtk",
 
   reached: "Reached model {n}",
+  tileSaved: "Saved",
+  tileCommands: "Commands",
+  tileAvg: "average {n} ms",
   without: "{n} without rtk",
   rowCommands: "Commands through rtk",
   rowHook: "Hook rewrote",
@@ -86,6 +89,9 @@ var ru = {
   tipNone: "rtk",
 
   reached: "Дошло до модели {n}",
+  tileSaved: "Сэкономлено",
+  tileCommands: "Команды",
+  tileAvg: "в среднем {n} мс",
   without: "{n} без rtk",
   rowCommands: "Команд через rtk",
   rowHook: "Хук переписал",

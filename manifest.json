@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "id": "ismoil.rtk",
   "name": "rtk",
-  "version": "3.0.2",
+  "version": "3.1.0",
   "author": "ismoil",
   "license": "MIT",
   "description": "Tokens saved by rtk today in the bar, and a popup per period: chart by hour or day, totals matching rtk gain, hook rewrites, projects with their worktrees and top commands. Readable for low vision (text scaling, WCAG AA contrast), English and Russian.",
@@ -20,7 +20,7 @@
     "defaultSection": "right",
     "defaults": {
       "period": "today",
-      "interval": 30,
+      "interval": 15,
       "language": "auto",
       "textSize": "Normal",
       "animations": true,
@@ -79,8 +79,8 @@
       {
         "key": "interval",
         "type": "number",
-        "label": "Refresh interval (seconds, at least 5)",
-        "description": "How often the bar total is re-read while the popup is closed."
+        "label": "Re-read at most every (seconds, at least 5)",
+        "description": "The widget re-reads the history only when rtk wrote to it (the folder is watched), at most this often, and every 10 minutes regardless."
       }
     ]
   }

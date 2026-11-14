@@ -49,7 +49,7 @@ On the widget's entry in `~/.config/omarchy/shell.json`, or in the shell's setti
 | `language` | `auto` | `auto` follows the system locale; or `en`, `ru`. |
 | `textSize` | `Normal` | `Normal`, `Large`, `Extra large`. Text is never smaller than 13 px. |
 | `animations` | `true` | Turn off to stop the columns and meters from sliding. |
-| `interval` | `30` | Seconds between reads of the bar total while the popup is closed (at least 5). |
+| `interval` | `15` | The history is re-read only after rtk wrote to it (its folder is watched), at most this often in seconds (at least 5), and every 10 minutes regardless. |
 | `database` | *(empty)* | Path to rtk's `history.db`. Empty means rtk's own location (`$XDG_DATA_HOME/rtk/history.db`, by default `~/.local/share/rtk/history.db`). |
 
 IPC: `omarchy-shell shell toggle ismoil.rtk '{}'`.

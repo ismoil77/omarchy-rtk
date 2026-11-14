@@ -1,4 +1,5 @@
 import QtQuick
+import Qt.labs.folderlistmodel
 import Quickshell
 import Quickshell.Io
 import qs.Commons
@@ -26,7 +27,16 @@ Panel {
   manageIpc: false
 
   readonly property string period: Model.validPeriod(setting("period", "today"))
-  readonly property int pollSeconds: Math.max(5, Number(setting("interval", 30)) || 30)
+  // rtk writes its history as it works: the widget re-reads when the folder
+  // changes, at most every `interval` seconds, and every 10 minutes regardless.
+  readonly property int pollSeconds: Math.max(5, Number(setting("interval", 15)) || 15)
+  readonly property string databasePath: {
+    var set = String(setting("database", "")).trim()
+    if (set !== "") return set
+    var data = Quickshell.env("XDG_DATA_HOME") || (Quickshell.env("HOME") + "/.local/share")
+    return data + "/rtk/history.db"
+  }
+  property bool dirty: true
   readonly property var cfg: Model.config({ language: setting("language", "auto"), locale: Qt.locale().name })
 
   readonly property bool vertical: bar ? bar.vertical : false
@@ -60,11 +70,24 @@ Panel {
     return decodeURIComponent(String(url).replace(/^file:\/\//, ""))
   }
 
+  Kit.ThemePalette { id: themePalette }
   Kit.Look {
     id: skin
     textSize: String(root.setting("textSize", "Normal"))
     animations: root.setting("animations", true) !== false
     fontFamily: root.bar ? root.bar.fontFamily : Style.font.family
+    themeColors: themePalette.colors
+  }
+
+  // Each write of rtk opens and drops `history.db-wal` beside the database:
+  // watching the folder costs nothing and never reads the database itself.
+  FolderListModel {
+    folder: "file://" + root.databasePath.replace(/\/[^\/]*$/, "")
+    nameFilters: [root.databasePath.replace(/.*\//, "") + "*"]
+    showDirs: false
+    onRowsInserted: root.dirty = true
+    onRowsRemoved: root.dirty = true
+    onDataChanged: root.dirty = true
   }
 
   TextMetrics { id: countMetrics; font.family: skin.fontFamily; font.pixelSize: skin.small; text: Model.countSample(root.stats) }
@@ -176,12 +199,21 @@ Panel {
     onTriggered: if (!root.answered && !statsProc.running) root.applyStats("")
   }
 
+  // A run when rtk wrote something since the last one (at most every
+  // `interval` s, 5 s while open), and every 10 minutes anyway (midnight, a
+  // missed event).
+  property real lastRun: 0
   Timer {
     interval: root.opened ? 5000 : root.pollSeconds * 1000
     running: true
     repeat: true
     triggeredOnStart: true
-    onTriggered: root.refresh()
+    onTriggered: {
+      if (!root.dirty && Date.now() - root.lastRun < 600000) return
+      root.dirty = false
+      root.lastRun = Date.now()
+      root.refresh()
+    }
   }
 
   onOpenedChanged: {
@@ -267,15 +299,23 @@ Panel {
             width: parent.width
             implicitHeight: Math.max(heroIcon.implicitHeight, heroLabels.implicitHeight, heroPercent.implicitHeight)
 
-            Text {
+            Rectangle {
               id: heroIcon
-              textFormat: Text.PlainText
-              text: root.icon
-              color: skin.accentText
-              font.family: skin.fontFamily
-              font.pixelSize: skin.hero
+              width: Math.round(skin.hero * 1.7)
+              height: width
+              radius: skin.radius
+              color: Util.alpha(skin.accentFill, 0.16)
               anchors.left: parent.left
               anchors.verticalCenter: parent.verticalCenter
+
+              Text {
+                anchors.centerIn: parent
+                textFormat: Text.PlainText
+                text: root.icon
+                color: skin.accentText
+                font.family: skin.fontFamily
+                font.pixelSize: skin.hero
+              }
             }
 
             Column {
@@ -349,6 +389,10 @@ Panel {
           }
 
           // ---------- Chart: saved tokens per hour (today) or per day ----------
+          Kit.Card {
+            width: parent.width
+            look: skin
+
           Kit.BarChart {
             id: chart
             width: parent.width
@@ -364,33 +408,42 @@ Panel {
             onColumnHovered: function(index) { root.cursor = index }
             onColumnLeft: root.cursor = -1
           }
+          }
 
-          // ---------- Reached the model vs without rtk: the accent part is what rtk cut ----------
-          Column {
+          // ---------- Saved · commands: the meter's accent part is what rtk cut ----------
+          Grid {
+            id: tiles
             width: parent.width
-            spacing: Style.space(6)
+            columns: 2
+            spacing: Style.space(8)
+            readonly property real cell: (width - spacing) / 2
 
-            Kit.Meter {
-              width: parent.width
+            Kit.Tile {
+              width: tiles.cell
               look: skin
-              fromRight: true
+              caption: root.tr("tileSaved")
+              value: Model.tokens(root.cfg, root.stats.total.saved)
+              valueColor: skin.accentText
               fraction: Model.fraction(root.stats.total.saved, root.stats.total.input)
+              detail: root.tr("without", { n: Model.tokens(root.cfg, root.stats.total.input) })
             }
 
-            Kit.InfoPair {
+            Kit.Tile {
+              width: tiles.cell
               look: skin
-              label: root.tr("reached", { n: Model.tokens(root.cfg, root.stats.total.output) })
-              value: root.tr("without", { n: Model.tokens(root.cfg, root.stats.total.input) })
+              caption: root.tr("tileCommands")
+              value: String(root.stats.total.commands)
+              detail: root.tr("tileAvg", { n: root.stats.total.avgMs })
             }
           }
 
-          Column {
+          Kit.Card {
             width: parent.width
+            look: skin
             spacing: Style.spacing.labelGap
 
-            Kit.InfoPair { look: skin; label: root.tr("rowCommands"); value: String(root.stats.total.commands) }
+            Kit.InfoPair { look: skin; label: root.tr("reached", { n: "" }).trim(); value: Model.tokens(root.cfg, root.stats.total.output) }
             Kit.InfoPair { look: skin; label: root.tr("rowHook"); value: Model.rewriteShare(root.cfg, root.stats.hook) }
-            Kit.InfoPair { look: skin; label: root.tr("rowAvg"); value: root.tr("rowAvgValue", { n: root.stats.total.avgMs }) }
             // rtk printed more than the raw command (git add, git fetch); like
             // `rtk gain`, those rows count as zero saved, not as a loss.
             Kit.InfoPair {
@@ -411,11 +464,10 @@ Panel {
           }
 
           // ---------- Projects ----------
-          PanelSeparator { foreground: skin.line }
-
-          Column {
+          Kit.Card {
             id: projectList
             width: parent.width
+            look: skin
             spacing: Style.space(3)
 
             PanelSectionHeader {
@@ -440,7 +492,7 @@ Panel {
 
               delegate: Kit.StatRow {
                 required property var modelData
-                width: projectList.width
+                width: projectList.width - projectList.padding * 2
                 look: skin
                 name: Model.projectName(root.cfg, modelData) + (modelData.copies.length > 1 ? "  · " + Model.copies(root.cfg, modelData.copies.length) : "")
                 cells: ["×" + modelData.commands, Model.tokens(root.cfg, modelData.saved), Model.pct(modelData.pct)]
@@ -461,10 +513,11 @@ Panel {
           }
 
           // ---------- Selected project: its copies ----------
-          Column {
+          Kit.Card {
             id: copyList
             visible: root.project !== null && root.project.copies.length > 1
             width: parent.width
+            look: skin
             spacing: Style.space(3)
 
             PanelSectionHeader {
@@ -480,7 +533,7 @@ Panel {
 
               delegate: Kit.StatRow {
                 required property var modelData
-                width: copyList.width
+                width: copyList.width - copyList.padding * 2
                 look: skin
                 name: Model.copyName(root.cfg, modelData)
                 cells: ["×" + modelData.commands, Model.tokens(root.cfg, modelData.saved), Model.pct(modelData.pct)]
@@ -498,10 +551,11 @@ Panel {
           }
 
           // ---------- Top commands (selected project or everything) ----------
-          Column {
+          Kit.Card {
             id: commandList
             visible: root.topCommands.length > 0
             width: parent.width
+            look: skin
             spacing: Style.space(3)
 
             PanelSectionHeader {
@@ -517,7 +571,7 @@ Panel {
 
               delegate: Kit.StatRow {
                 required property var modelData
-                width: commandList.width
+                width: commandList.width - commandList.padding * 2
                 look: skin
                 name: modelData.cmd
                 cells: ["×" + modelData.commands, Model.tokens(root.cfg, modelData.saved), Model.pct(modelData.pct)]
@@ -529,7 +583,6 @@ Panel {
           }
 
           // ---------- Actions ----------
-          PanelSeparator { foreground: skin.line }
 
           Row {
             id: actionRow

@@ -1,5 +1,13 @@
 # Changelog
 
+## 3.1.0
+
+- **Reads only when rtk wrote something.** The database folder is watched (rtk opens and drops
+  `history.db-wal` on every write); the history is re-read at most every `interval` seconds (15) after
+  a change, and every 10 minutes regardless — instead of every 30 seconds whether anything happened.
+- New look from kit 1.2: the chart, the details, projects and top commands in cards; "Saved" and
+  "Commands" tiles; theme colours followed live.
+
 ## 3.0.2
 
 - **Security: the bar alone closes an old open cache.** 3.0.1 tightened a cache left readable by
