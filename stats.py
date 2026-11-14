@@ -19,6 +19,7 @@ worktrees and copies of one repo are a single row with the copies listed
 inside.
 """
 import argparse
+import fcntl
 import glob
 import json
 import os
@@ -502,9 +503,26 @@ def bar_key(db_path, now=None):
 
 def cached_bar(db_path, cache_path):
     """The bar total from the last run if nothing it depends on changed since:
-    every bar (one per monitor) asks when rtk writes, only the first one reads."""
+    every bar (one per monitor) asks when rtk writes, only the first one reads.
+    (On a hit the database is not opened, so nothing else of summarize() runs.)"""
+    folder = os.path.dirname(cache_path)
+    path = os.path.join(folder, "bar-v1.json")
+    # Both bars ask in the same instant: the lock makes the second one wait and
+    # find the first one's answer.
+    try:
+        os.makedirs(folder, mode=0o700, exist_ok=True)
+        lock = os.open(os.path.join(folder, "bar.lock"), os.O_WRONLY | os.O_CREAT, 0o600)
+    except OSError:
+        return summarize(db_path, cache_path, "bar")
+    try:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        return _cached_bar(db_path, cache_path, path)
+    finally:
+        os.close(lock)
+
+
+def _cached_bar(db_path, cache_path, path):
     key = bar_key(db_path)
-    path = os.path.join(os.path.dirname(cache_path), "bar-v1.json")
     try:
         with open(path) as f:
             saved = json.load(f)
@@ -530,7 +548,8 @@ def cached_bar(db_path, cache_path):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("period", nargs="?", default="bar", choices=("bar",) + PERIODS)
-    parser.add_argument("--db", default=default_db(), type=os.path.expanduser,
+    # The widget passes a custom path as ISMOIL_RTK_DB: argv is public to other local accounts.
+    parser.add_argument("--db", default=os.environ.get("ISMOIL_RTK_DB") or default_db(), type=os.path.expanduser,
                         help="rtk history database (default: rtk's own location)")
     parser.add_argument("--cache", default=default_cache())
     args = parser.parse_args(argv)

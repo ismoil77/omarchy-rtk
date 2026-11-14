@@ -103,11 +103,7 @@ test("countSample is as wide as the biggest count", () => {
   assert.equal(M.countSample({ total: { commands: 1234567 } }), "×0000000")
 })
 
-test("subtitle: saved line, and why there is none", () => {
-  const ok = { ok: true, period: "today", total: { saved: 119700 } }
-  assert.equal(M.subtitle(en, ok), "Saved 119.7K today")
-  assert.equal(M.subtitle(ru, ok), "Сэкономлено 119,7K за сегодня")
-  assert.equal(M.subtitle(en, { ...ok, period: "all" }), "Saved 119.7K all time")
+test("subtitle: why there are no numbers", () => {
   assert.equal(M.subtitle(en, { ok: false, error: "nodb" }), "rtk has no history yet")
   assert.equal(M.subtitle(en, { ok: false, error: "busy" }), "The rtk database is busy")
   assert.match(M.subtitle(en, { ok: false, error: "schema" }), /layout/)

@@ -7,7 +7,6 @@
 
 var PERIODS = ["today", "week", "all"]
 var PERIOD_KEYS = { today: "periodToday", week: "periodWeek", all: "periodAll" }
-var SINCE_KEYS = { today: "sinceToday", week: "sinceWeek", all: "sinceAll" }
 // A long list shows its first SHORT_LIST rows until it is expanded.
 var SHORT_LIST = 5
 
@@ -113,8 +112,8 @@ function periodLabel(cfg, period) { return tr(cfg, PERIOD_KEYS[period] || PERIOD
 var ERROR_KEYS = { nodb: "errNoDb", busy: "errBusy", schema: "errSchema", unreadable: "errUnreadable", internal: "errInternal" }
 
 // The line under the title: "Saved 119.7K today", or why there is nothing yet.
+// What the header says while there are no numbers: loading, or why not.
 function subtitle(cfg, stats) {
-  if (stats.ok) return tr(cfg, "savedLine", { n: tokens(cfg, stats.total.saved), since: tr(cfg, SINCE_KEYS[stats.period] || SINCE_KEYS.today) })
   if (!stats.error) return tr(cfg, "loading")
   // A code this widget does not know (a newer stats.py) is still an error, not "Loading…".
   return tr(cfg, ERROR_KEYS[stats.error] || "errInternal")

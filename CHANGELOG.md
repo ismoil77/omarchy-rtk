@@ -1,5 +1,15 @@
 # Changelog
 
+## 3.2.0 — family look and audit
+
+- The family look (kit 2). The popup is built the first time it opens.
+- The watcher ignored a `database` setting written with `~`, so the bar updated only every 10 minutes.
+- Reading the history made SQLite create and drop `history.db-shm`/`-wal`, which the watcher took for
+  rtk writing: each run caused another. Changes during the widget's own run are now ignored.
+- A custom database path goes by environment (`ISMOIL_RTK_DB`), not on the command line.
+- Both bars share the bar total under a lock; "All time" re-reads every 15 s while open, not 5.
+- Removed unused texts and a dead branch of the header text.
+
 ## 3.1.1
 
 - Security (marketplace review): git runs with the project folder as its working directory instead of

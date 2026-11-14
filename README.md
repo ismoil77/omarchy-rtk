@@ -63,7 +63,8 @@ scrolls when large text outgrows the screen.
 
 ## Privacy and safety
 
-The widget opens rtk's database **read-only** and never writes to it. It makes no network calls.
+The widget opens rtk's database **read-only** and never changes its contents. (While reading a
+WAL database SQLite itself creates and removes `history.db-shm`/`-wal` beside it.) It makes no network calls.
 The only thing it writes is a small cache of folder → project lookups in
 `$XDG_CACHE_HOME/ismoil-rtk/paths-v6.json`, so deleted worktrees still land in their project.
 That cache holds your project and worktree paths, so its folder is owner-only (0700) and its

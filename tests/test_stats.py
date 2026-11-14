@@ -453,6 +453,11 @@ class ProjectGrouping(Base):
             self.assertFalse(any("secret-project" in str(part) for part in cmd), cmd)
             self.assertEqual(cwd, repo)
 
+    def test_a_custom_database_comes_by_environment_not_argv(self):
+        with mock.patch.dict(os.environ, {"ISMOIL_RTK_DB": self.db_path}), mock.patch("sys.stdout", io.StringIO()) as out:
+            stats.main(["bar", "--cache", self.cache_path])
+        self.assertTrue(json.loads(out.getvalue())["ok"])
+
     def test_a_deleted_worktree_stays_in_its_project(self):
         main = self.repo("app")
         wt = os.path.join(self.dir, "app-lane9")

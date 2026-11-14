@@ -24,7 +24,7 @@ TestCase {
 
   function test_texts() {
     var en = Model.config({ language: "en" })
-    compare(Model.subtitle(en, { ok: true, period: "week", total: { saved: 5000 } }), "Saved 5.0K over 7 days")
+    compare(Model.subtitle(en, { ok: false, error: "nodb" }), "rtk has no history yet")
     compare(Model.slotTitle(en, "today", { key: "15" }, true), "15:00–16:00")
     compare(Model.moreLabel(en, [1, 2, 3, 4, 5, 6, 7], false), "2 more")
   }
