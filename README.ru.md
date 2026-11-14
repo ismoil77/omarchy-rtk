@@ -48,7 +48,7 @@ omarchy plugin add https://github.com/ismoil77/omarchy-rtk --enable
 | `language` | `auto` | `auto` — по локали системы; или `en`, `ru`. |
 | `textSize` | `Normal` | `Normal`, `Large`, `Extra large`. Текст не мельче 13 px. |
 | `animations` | `true` | Выключите, чтобы столбцы и полосы не плыли. |
-| `interval` | `15` | История перечитывается только после того, как rtk в неё записал (папка под наблюдением), не чаще раза в столько секунд (не меньше 5), и раз в 10 минут в любом случае. |
+| `interval` | `30` | История перечитывается только после того, как rtk в неё записал (папка под наблюдением), не чаще раза в столько секунд (не меньше 5), и раз в 10 минут в любом случае. |
 | `database` | *(пусто)* | Путь к `history.db` rtk. Пусто — штатное место rtk (`$XDG_DATA_HOME/rtk/history.db`, по умолчанию `~/.local/share/rtk/history.db`). |
 
 IPC: `omarchy-shell shell toggle ismoil.rtk '{}'`.

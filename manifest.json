@@ -20,7 +20,7 @@
     "defaultSection": "right",
     "defaults": {
       "period": "today",
-      "interval": 15,
+      "interval": 30,
       "language": "auto",
       "textSize": "Normal",
       "animations": true,

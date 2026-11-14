@@ -10,6 +10,7 @@ import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 from datetime import datetime, timedelta, timezone
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
@@ -416,6 +417,25 @@ class ProjectGrouping(Base):
             self.assertEqual(os.stat(folder).st_mode & 0o777, 0o700, db)
             self.assertEqual(os.stat(self.cache_path).st_mode & 0o777, 0o600, db)
             self.assertEqual(os.stat(stale).st_mode & 0o777, 0o600, db)
+
+    def test_the_bar_total_is_reused_until_the_database_changes(self):
+        """Two bars ask at once: the second gets the first one's answer, owner-only."""
+        calls = []
+        real = stats.summarize
+        def counting(*a, **k):
+            calls.append(a[2])
+            return real(*a, **k)
+        with mock.patch.object(stats, "summarize", counting):
+            first = stats.cached_bar(self.db_path, self.cache_path)
+            again = stats.cached_bar(self.db_path, self.cache_path)
+            self.assertEqual(first, again)
+            self.assertEqual(calls, ["bar"])
+            cache = os.path.join(os.path.dirname(self.cache_path), "bar-v1.json")
+            self.assertEqual(os.stat(cache).st_mode & 0o777, 0o600)
+            later = os.stat(self.db_path).st_mtime_ns + 10**9
+            os.utime(self.db_path, ns=(later, later))
+            stats.cached_bar(self.db_path, self.cache_path)
+            self.assertEqual(calls, ["bar", "bar"])
 
     def test_a_deleted_worktree_stays_in_its_project(self):
         main = self.repo("app")

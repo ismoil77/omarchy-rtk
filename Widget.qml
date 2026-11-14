@@ -29,7 +29,7 @@ Panel {
   readonly property string period: Model.validPeriod(setting("period", "today"))
   // rtk writes its history as it works: the widget re-reads when the folder
   // changes, at most every `interval` seconds, and every 10 minutes regardless.
-  readonly property int pollSeconds: Math.max(5, Number(setting("interval", 15)) || 15)
+  readonly property int pollSeconds: Math.max(5, Number(setting("interval", 30)) || 30)
   readonly property string databasePath: {
     var set = String(setting("database", "")).trim()
     if (set !== "") return set

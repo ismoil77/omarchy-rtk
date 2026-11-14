@@ -483,6 +483,45 @@ def summarize(db_path, cache_path, period, now=None):
     return result
 
 
+def bar_key(db_path, now=None):
+    """What the bar total depends on: the database and its WAL as they are now,
+    and the local day (today's total starts over at midnight)."""
+    parts = [os.path.abspath(db_path), (now or datetime.now().astimezone()).strftime("%Y-%m-%d")]
+    for path in (db_path, db_path + "-wal"):
+        try:
+            parts.append(str(os.stat(path).st_mtime_ns))
+        except OSError:
+            parts.append("-")
+    return "|".join(parts)
+
+
+def cached_bar(db_path, cache_path):
+    """The bar total from the last run if nothing it depends on changed since:
+    every bar (one per monitor) asks when rtk writes, only the first one reads."""
+    key = bar_key(db_path)
+    path = os.path.join(os.path.dirname(cache_path), "bar-v1.json")
+    try:
+        with open(path) as f:
+            saved = json.load(f)
+        if saved.get("key") == key and isinstance(saved.get("result"), dict):
+            return saved["result"]
+    except (OSError, ValueError):
+        pass
+    result = summarize(db_path, cache_path, "bar")
+    if result.get("ok"):
+        try:
+            os.makedirs(os.path.dirname(path), mode=0o700, exist_ok=True)
+            tmp = "%s.%d.tmp" % (path, os.getpid())
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+            os.fchmod(fd, 0o600)
+            with os.fdopen(fd, "w") as f:
+                json.dump({"key": key, "result": result}, f)
+            os.replace(tmp, path)
+        except OSError:
+            pass
+    return result
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("period", nargs="?", default="bar", choices=("bar",) + PERIODS)
@@ -491,7 +530,7 @@ def main(argv=None):
     parser.add_argument("--cache", default=default_cache())
     args = parser.parse_args(argv)
     try:
-        result = summarize(args.db, args.cache, args.period)
+        result = cached_bar(args.db, args.cache) if args.period == "bar" else summarize(args.db, args.cache, args.period)
     except Exception as e:  # the widget needs an answer it can show, never a traceback
         result = {"ok": False, "period": args.period, "todayOk": False, "error": "internal", "detail": repr(e)}
     print(json.dumps(result, ensure_ascii=False))
